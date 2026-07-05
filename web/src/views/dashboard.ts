@@ -4,12 +4,14 @@ import {
   getGoalProjection,
   getWeightOutliers,
   getPlateauAssessment,
+  getDataQuality,
   triggerRecompute,
   type DashboardData,
   type WeeklyInsights,
   type GoalProjectionResult,
   type WeightOutlierResult,
   type PlateauResult,
+  type DataQuality,
 } from "@tdee/server";
 import { supabase } from "../supabase.js";
 import { el, fmt, fmtInt, fmtTimestamp, localIsoToday } from "../util.js";
@@ -317,6 +319,39 @@ function plateauCard(r: PlateauResult | null): HTMLElement | null {
   ]);
 }
 
+function coverageRow(name: string, logged: number, total: number, color: string): HTMLElement {
+  const pct = total > 0 ? Math.round((logged / total) * 100) : 0;
+  return el("div", { attrs: { style: "margin-bottom:12px;" } }, [
+    el("div", { attrs: { style: "display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px;" } }, [
+      el("span", { text: name }),
+      el("span", { attrs: { style: "color:var(--muted);font-weight:600;" }, html: `<b style="color:var(--text);">${logged}</b> / ${total} days` }),
+    ]),
+    el("div", { attrs: { style: "height:8px;border-radius:999px;background:var(--card2);overflow:hidden;" } }, [
+      el("div", { attrs: { style: `height:100%;width:${pct}%;border-radius:999px;background:${color};transition:width .5s ease;` } }),
+    ]),
+  ]);
+}
+
+function dataQualityCard(q: DataQuality | null): HTMLElement | null {
+  if (!q) return null;
+  const conf =
+    q.confidence === "high"
+      ? { pill: "data", label: "High", note: "Plenty of recent logs — your data-driven TDEE is on solid footing." }
+      : q.confidence === "good"
+        ? { pill: "data", label: "Good", note: "Enough recent data for a data-driven TDEE." }
+        : { pill: "warn", label: "Limited", note: "Sparse recent calorie logs — TDEE may fall back to an estimate. Logging more days improves accuracy." };
+  return el("div", { class: "card" }, [
+    el("h2", { text: "Data quality" }),
+    coverageRow("Calories logged", q.calorieDaysLogged, q.windowDays, "var(--accent)"),
+    coverageRow("Weight logged", q.weightDaysLogged, q.windowDays, "var(--gold)"),
+    el("div", { attrs: { style: "display:flex;align-items:center;gap:8px;margin-top:4px;" } }, [
+      el("span", { text: "TDEE confidence", attrs: { style: "font-size:13px;font-weight:700;" } }),
+      el("span", { class: `pill ${conf.pill}`, text: conf.label }),
+    ]),
+    el("p", { class: "muted", attrs: { style: "margin:8px 0 0;" }, text: conf.note }),
+  ]);
+}
+
 function render(
   root: HTMLElement,
   d: DashboardData,
@@ -324,6 +359,7 @@ function render(
   projection: GoalProjectionResult | null,
   outliers: WeightOutlierResult | null,
   plateau: PlateauResult | null,
+  dataQuality: DataQuality | null,
   stale: boolean,
 ): void {
   const today = localIsoToday();
@@ -400,6 +436,7 @@ function render(
 
   const proj = projectionCard(projection);
   const plat = plateauCard(plateau);
+  const dq = dataQualityCard(dataQuality);
 
   const grid = el("div", { class: "dash-grid" }, [
     heroCard(root, d),
@@ -407,6 +444,7 @@ function render(
     ...(proj ? [proj] : []),
     ...(plat ? [plat] : []),
     ...(week ? [week] : []),
+    ...(dq ? [dq] : []),
     balanceCard,
     formulasCard,
     metricCard(root, "tdee", "TDEE", fmtInt(d.tdee.value, " kcal")),
@@ -436,28 +474,30 @@ interface CachedPayload {
   projection: GoalProjectionResult | null;
   outliers: WeightOutlierResult | null;
   plateau: PlateauResult | null;
+  dataQuality: DataQuality | null;
 }
 
 async function load(root: HTMLElement): Promise<void> {
   skeleton(root);
   const today = localIsoToday();
   try {
-    const [data, insights, projection, outliers, plateau] = await Promise.all([
+    const [data, insights, projection, outliers, plateau, dataQuality] = await Promise.all([
       getDashboard(supabase as never, today),
       getWeeklyInsights(supabase as never, today).catch(() => null),
       getGoalProjection(supabase as never, today).catch(() => null),
       getWeightOutliers(supabase as never, today).catch(() => null),
       getPlateauAssessment(supabase as never, today).catch(() => null),
+      getDataQuality(supabase as never, today).catch(() => null),
     ]);
-    localStorage.setItem(LAST_KEY, JSON.stringify({ d: data, insights, projection, outliers, plateau } satisfies CachedPayload));
-    render(root, data, insights, projection, outliers, plateau, false);
+    localStorage.setItem(LAST_KEY, JSON.stringify({ d: data, insights, projection, outliers, plateau, dataQuality } satisfies CachedPayload));
+    render(root, data, insights, projection, outliers, plateau, dataQuality, false);
   } catch {
     const cached = localStorage.getItem(LAST_KEY);
     if (cached) {
       const parsed = JSON.parse(cached) as CachedPayload | DashboardData;
       // Support both the new combined shape and any older cache (dashboard-only).
-      if ("d" in parsed) render(root, parsed.d, parsed.insights, parsed.projection ?? null, parsed.outliers ?? null, parsed.plateau ?? null, true);
-      else render(root, parsed, null, null, null, null, true);
+      if ("d" in parsed) render(root, parsed.d, parsed.insights, parsed.projection ?? null, parsed.outliers ?? null, parsed.plateau ?? null, parsed.dataQuality ?? null, true);
+      else render(root, parsed, null, null, null, null, null, true);
     } else {
       root.replaceChildren(el("div", { class: "card" }, [el("p", { class: "err", text: "Could not load dashboard and no cached data is available." })]));
     }

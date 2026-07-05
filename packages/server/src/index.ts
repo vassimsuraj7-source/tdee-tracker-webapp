@@ -13,3 +13,4 @@ export * from "./formulas.js";
 export * from "./projection.js";
 export * from "./outliers.js";
 export * from "./plateau.js";
+export * from "./dataQuality.js";
