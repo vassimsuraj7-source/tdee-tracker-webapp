@@ -1,4 +1,10 @@
-import { getDashboard, triggerRecompute, type DashboardData } from "@tdee/server";
+import {
+  getDashboard,
+  getWeeklyInsights,
+  triggerRecompute,
+  type DashboardData,
+  type WeeklyInsights,
+} from "@tdee/server";
 import { supabase } from "../supabase.js";
 import { el, fmt, fmtInt, fmtTimestamp, localIsoToday } from "../util.js";
 import { renderMetricDetail } from "./detail.js";
@@ -99,7 +105,56 @@ function macroCard(d: DashboardData): HTMLElement | null {
   ]);
 }
 
-function render(root: HTMLElement, d: DashboardData, stale: boolean): void {
+function stat(label: string, valueHtml: string, note?: string): HTMLElement {
+  return el("div", { attrs: { style: "background:var(--card2);border-radius:14px;padding:13px 14px;" } }, [
+    el("div", { attrs: { style: "font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);margin-bottom:6px;" }, text: label }),
+    el("div", { attrs: { style: "font-size:20px;font-weight:800;letter-spacing:-.4px;" }, html: valueHtml }),
+    ...(note ? [el("div", { attrs: { style: "font-size:11px;color:var(--faint);margin-top:3px;font-weight:600;" }, text: note })] : []),
+  ]);
+}
+
+function rate(kg: number | null): string {
+  if (kg == null) return "—";
+  const sign = kg > 0.005 ? "+" : kg < -0.005 ? "−" : "";
+  return `${sign}${Math.abs(kg).toFixed(2)}<small style="font-size:12px;font-weight:700;color:var(--muted);"> kg/wk</small>`;
+}
+
+function insightsCard(w: WeeklyInsights): HTMLElement | null {
+  // Only worth showing once there's at least some intake data this week.
+  if (w.avgIntake7d == null && w.actualWeeklyRateKg == null) return null;
+
+  const stats: HTMLElement[] = [];
+
+  // Average intake with week-over-week delta.
+  if (w.avgIntake7d != null) {
+    let note: string | undefined;
+    if (w.avgIntakePrev7d != null) {
+      const delta = Math.round(w.avgIntake7d - w.avgIntakePrev7d);
+      note = delta === 0 ? "same as last week" : `${delta < 0 ? "−" : "+"}${Math.abs(delta)} vs last week`;
+    }
+    stats.push(stat("Avg intake", `${Math.round(w.avgIntake7d)}<small style="font-size:12px;font-weight:700;color:var(--muted);"> kcal</small>`, note));
+  }
+
+  // Adherence to target.
+  if (w.adherencePct != null) {
+    const on = w.adherencePct >= 95 && w.adherencePct <= 108;
+    const color = on ? "var(--good)" : "var(--gold)";
+    stats.push(stat("Adherence", `<span style="color:${color};">${w.adherencePct}%</span>`, "of calorie target"));
+  }
+
+  // Actual weekly weight change (trend-based).
+  stats.push(stat("Weight change", rate(w.actualWeeklyRateKg), "trend, last 7 days"));
+
+  // Logged days.
+  stats.push(stat("Days logged", `${w.loggedDays7d}<small style="font-size:12px;font-weight:700;color:var(--muted);"> / 7</small>`, "calories this week"));
+
+  return el("div", { class: "card" }, [
+    el("h2", { text: "This week" }),
+    el("div", { attrs: { style: "display:grid;grid-template-columns:1fr 1fr;gap:10px;" } }, stats),
+  ]);
+}
+
+function render(root: HTMLElement, d: DashboardData, insights: WeeklyInsights | null, stale: boolean): void {
   const today = localIsoToday();
   const banners: HTMLElement[] = [];
   if (stale) banners.push(el("div", { class: "banner warn", text: "Offline — showing the last data loaded. It may be out of date." }));
@@ -113,24 +168,25 @@ function render(root: HTMLElement, d: DashboardData, stale: boolean): void {
 
   const recomputeBtn = el("button", { class: "btn secondary small", text: "Recompute now" });
   const recomputeMsg = el("span", { class: "muted" });
-  recomputeBtn.addEventListener("click", async () => {
+  recomputeBtn.addEventListener("click", () => {
     recomputeBtn.setAttribute("disabled", "true");
     recomputeMsg.textContent = "Recomputing…";
-    try {
-      await triggerRecompute(supabase as never, today);
-      await load(root);
-    } catch {
-      recomputeMsg.textContent = "Recompute failed.";
-      recomputeBtn.removeAttribute("disabled");
-    }
+    triggerRecompute(supabase as never, today)
+      .then(() => load(root))
+      .catch(() => {
+        recomputeMsg.textContent = "Recompute failed.";
+        recomputeBtn.removeAttribute("disabled");
+      });
   });
 
   const macros = macroCard(d);
+  const week = insights ? insightsCard(insights) : null;
 
   root.replaceChildren(
     ...banners,
     heroCard(root, d),
     ...(macros ? [macros] : []),
+    ...(week ? [week] : []),
     metricCard(root, "tdee", "TDEE", fmtInt(d.tdee.value, " kcal")),
     metricCard(root, "weight", "Weight · 7-day avg", fmt(d.weight.average7d, 1, " kg"), d.weight.latest ? `latest ${fmt(d.weight.latest.value, 1)} kg` : undefined),
     metricCard(root, "bodyfat", "Body fat · 7-day avg", fmt(bf, 1, "%"), bfLatest),
@@ -156,16 +212,31 @@ function skeleton(root: HTMLElement): void {
   );
 }
 
+interface CachedPayload {
+  d: DashboardData;
+  insights: WeeklyInsights | null;
+}
+
 async function load(root: HTMLElement): Promise<void> {
   skeleton(root);
+  const today = localIsoToday();
   try {
-    const data = await getDashboard(supabase as never, localIsoToday());
-    localStorage.setItem(LAST_KEY, JSON.stringify(data));
-    render(root, data, false);
+    const [data, insights] = await Promise.all([
+      getDashboard(supabase as never, today),
+      getWeeklyInsights(supabase as never, today).catch(() => null),
+    ]);
+    localStorage.setItem(LAST_KEY, JSON.stringify({ d: data, insights } satisfies CachedPayload));
+    render(root, data, insights, false);
   } catch {
     const cached = localStorage.getItem(LAST_KEY);
-    if (cached) render(root, JSON.parse(cached) as DashboardData, true);
-    else root.replaceChildren(el("div", { class: "card" }, [el("p", { class: "err", text: "Could not load dashboard and no cached data is available." })]));
+    if (cached) {
+      const parsed = JSON.parse(cached) as CachedPayload | DashboardData;
+      // Support both the new combined shape and any older cache (dashboard-only).
+      if ("d" in parsed) render(root, parsed.d, parsed.insights, true);
+      else render(root, parsed, null, true);
+    } else {
+      root.replaceChildren(el("div", { class: "card" }, [el("p", { class: "err", text: "Could not load dashboard and no cached data is available." })]));
+    }
   }
 }
 
