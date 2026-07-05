@@ -3,6 +3,7 @@ import {
   startPhase,
   endCurrentPhase,
   deletePhase,
+  triggerRecompute,
   type PhaseType,
   type PhaseWithSummary,
 } from "@tdee/server";
@@ -10,6 +11,15 @@ import { supabase } from "../supabase.js";
 import { el, localIsoToday } from "../util.js";
 
 const client = () => supabase as never;
+
+/** Refresh the stored calorie target after a phase change (non-fatal on failure). */
+async function recomputeQuietly(): Promise<void> {
+  try {
+    await triggerRecompute(client(), localIsoToday());
+  } catch {
+    /* recompute is best-effort here; the nightly job / manual button will catch up */
+  }
+}
 
 const PHASE_LABEL: Record<PhaseType, string> = { cut: "Cut (deficit)", maintain: "Maintain", bulk: "Bulk (surplus)" };
 const PHASE_COLOR: Record<PhaseType, string> = { cut: "var(--accent)", maintain: "var(--gold)", bulk: "var(--violet)" };
@@ -52,11 +62,16 @@ function startForm(onDone: () => void): HTMLElement {
   const btn = el("button", { class: "btn small", text: "Start phase" });
   btn.addEventListener("click", async () => {
     msg.textContent = "";
+    btn.setAttribute("disabled", "true");
+    btn.textContent = "Starting…";
     try {
       await startPhase(client(), { phaseType: type.value, startDate: date.value, note: note.value.trim() || null });
+      await recomputeQuietly();
       note.value = "";
       onDone();
     } catch (e) {
+      btn.removeAttribute("disabled");
+      btn.textContent = "Start phase";
       msg.textContent = e instanceof Error ? e.message : "Failed to start phase.";
     }
   });
@@ -79,7 +94,10 @@ function phaseCard(p: PhaseWithSummary, reload: () => void, current: boolean): H
   if (current) {
     const endBtn = el("button", { class: "btn secondary small", text: "End phase" });
     endBtn.addEventListener("click", async () => {
+      endBtn.setAttribute("disabled", "true");
+      endBtn.textContent = "Ending…";
       await endCurrentPhase(client(), localIsoToday());
+      await recomputeQuietly();
       reload();
     });
     actions.push(endBtn);
