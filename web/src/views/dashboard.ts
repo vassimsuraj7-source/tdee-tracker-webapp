@@ -3,11 +3,13 @@ import {
   getWeeklyInsights,
   getGoalProjection,
   getWeightOutliers,
+  getPlateauAssessment,
   triggerRecompute,
   type DashboardData,
   type WeeklyInsights,
   type GoalProjectionResult,
   type WeightOutlierResult,
+  type PlateauResult,
 } from "@tdee/server";
 import { supabase } from "../supabase.js";
 import { el, fmt, fmtInt, fmtTimestamp, localIsoToday } from "../util.js";
@@ -283,12 +285,45 @@ function projectionCard(r: GoalProjectionResult | null): HTMLElement | null {
   ]);
 }
 
+function plateauCard(r: PlateauResult | null): HTMLElement | null {
+  if (!r || r.assessment.status !== "plateau") return null;
+  const a = r.assessment;
+  const wks = a.windowDays ? Math.round(a.windowDays / 7) : null;
+  const kcalTxt = a.maintenanceKcal != null ? ` (about ${a.maintenanceKcal} kcal/day)` : "";
+
+  const evidence = el("details", { class: "about" }, [
+    el("summary", { text: "What the research says" }),
+    el("div", { class: "about-body" }, [
+      el("p", { html: "A stall almost always means the calorie deficit has closed — not a “broken” or “starvation-mode” metabolism. Two well-documented drivers:" }),
+      el("ul", {}, [
+        el("li", { html: "<b>Lower body mass burns fewer calories</b>, so a once-effective intake gradually becomes maintenance." }),
+        el("li", { html: "<b>Intake creeps up and is under-recorded</b> — “diet-resistant” people have been shown to under-report intake by ~40–50% on average, which alone explains many plateaus." }),
+      ]),
+      el("p", { html: "<b>Adaptive thermogenesis</b> (a fall in expenditure beyond what lost weight predicts) is real but <b>modest</b> — on the order of tens of kcal/day — and reviews find it inconsistent and often overstated. It slows progress slightly; it doesn't stop it." }),
+      el("p", { class: "src", html: "Sources: Lichtenstein &amp; Heymsfield, NEJM 1992 (self-report discrepancy); Thomas et al., AJCN 2014 (adherence &amp; the plateau); systematic reviews of adaptive thermogenesis (e.g. Br J Nutr, 2021). Educational only — not medical advice." }),
+    ]),
+  ]);
+
+  return el("div", { class: "card" }, [
+    el("h2", { text: "Plateau check" }),
+    el("p", { attrs: { style: "margin:0 0 10px;font-size:14px;line-height:1.5;" }, html: `Your weight trend has been essentially flat over the last ~${wks ?? 2} weeks. At a steady weight you're eating around maintenance${kcalTxt} — the deficit has closed. That's expected physiology, <b>not</b> a damaged metabolism.` }),
+    el("p", { class: "muted", attrs: { style: "margin:0 0 6px;font-weight:700;color:var(--text);" }, text: "To resume losing (pick one):" }),
+    el("ul", { attrs: { style: "margin:0 0 4px;padding-left:18px;font-size:13px;color:var(--muted);line-height:1.55;" } }, [
+      el("li", { html: "Tighten logging for a week — under-recording (oils, drinks, portions) is the most common cause." }),
+      el("li", { html: "Or trim ~150–250 kcal/day to reopen a modest deficit; keep protein high to protect muscle." }),
+      el("li", { html: "Or hold here — maintenance is a perfectly valid, healthy choice." }),
+    ]),
+    evidence,
+  ]);
+}
+
 function render(
   root: HTMLElement,
   d: DashboardData,
   insights: WeeklyInsights | null,
   projection: GoalProjectionResult | null,
   outliers: WeightOutlierResult | null,
+  plateau: PlateauResult | null,
   stale: boolean,
 ): void {
   const today = localIsoToday();
@@ -364,11 +399,13 @@ function render(
   formulasCard.addEventListener("click", () => open(root, "formulas"));
 
   const proj = projectionCard(projection);
+  const plat = plateauCard(plateau);
 
   const grid = el("div", { class: "dash-grid" }, [
     heroCard(root, d),
     ...(macros ? [macros] : []),
     ...(proj ? [proj] : []),
+    ...(plat ? [plat] : []),
     ...(week ? [week] : []),
     balanceCard,
     formulasCard,
@@ -398,27 +435,29 @@ interface CachedPayload {
   insights: WeeklyInsights | null;
   projection: GoalProjectionResult | null;
   outliers: WeightOutlierResult | null;
+  plateau: PlateauResult | null;
 }
 
 async function load(root: HTMLElement): Promise<void> {
   skeleton(root);
   const today = localIsoToday();
   try {
-    const [data, insights, projection, outliers] = await Promise.all([
+    const [data, insights, projection, outliers, plateau] = await Promise.all([
       getDashboard(supabase as never, today),
       getWeeklyInsights(supabase as never, today).catch(() => null),
       getGoalProjection(supabase as never, today).catch(() => null),
       getWeightOutliers(supabase as never, today).catch(() => null),
+      getPlateauAssessment(supabase as never, today).catch(() => null),
     ]);
-    localStorage.setItem(LAST_KEY, JSON.stringify({ d: data, insights, projection, outliers } satisfies CachedPayload));
-    render(root, data, insights, projection, outliers, false);
+    localStorage.setItem(LAST_KEY, JSON.stringify({ d: data, insights, projection, outliers, plateau } satisfies CachedPayload));
+    render(root, data, insights, projection, outliers, plateau, false);
   } catch {
     const cached = localStorage.getItem(LAST_KEY);
     if (cached) {
       const parsed = JSON.parse(cached) as CachedPayload | DashboardData;
       // Support both the new combined shape and any older cache (dashboard-only).
-      if ("d" in parsed) render(root, parsed.d, parsed.insights, parsed.projection ?? null, parsed.outliers ?? null, true);
-      else render(root, parsed, null, null, null, true);
+      if ("d" in parsed) render(root, parsed.d, parsed.insights, parsed.projection ?? null, parsed.outliers ?? null, parsed.plateau ?? null, true);
+      else render(root, parsed, null, null, null, null, true);
     } else {
       root.replaceChildren(el("div", { class: "card" }, [el("p", { class: "err", text: "Could not load dashboard and no cached data is available." })]));
     }
