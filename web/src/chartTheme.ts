@@ -92,6 +92,7 @@ export function phaseColor(type: string): string {
   const c = themeColors();
   if (type === "cut") return c.accent;
   if (type === "bulk") return c.violet;
+  if (type === "recomp") return cssVar("--recomp", "#0e97a8");
   return c.gold; // maintain
 }
 

@@ -17,9 +17,9 @@ export interface CalorieTargetInput {
   readonly heightCm: number;
   /** Active weight Main_Goal, if one exists. */
   readonly goal?: WeightGoal;
-  /** Active diet phase, if any. A "maintain" phase forces maintenance calories,
-   *  overriding any goal; "cut"/"bulk" defer to the goal. */
-  readonly phase?: "cut" | "maintain" | "bulk";
+  /** Active diet phase, if any. "maintain" forces maintenance (overriding any goal);
+   *  "recomp" applies a gentle deficit with high protein; "cut"/"bulk" defer to the goal. */
+  readonly phase?: "cut" | "maintain" | "bulk" | "recomp";
   readonly today: IsoDate;
 }
 
@@ -70,6 +70,27 @@ export function calorieTarget(input: CalorieTargetInput): CalorieTargetResult {
 
   // A maintenance phase intentionally holds weight — eat at TDEE, ignoring any goal.
   if (phase === "maintain") return maintenance();
+
+  // Recomposition: a gentle deficit (fat loss) while high protein + resistance
+  // training preserve/build muscle. Evidence favours maintenance-to-modest-deficit;
+  // we use ~10% of TDEE capped at 250 kcal (the safe low end). Skip the deficit if
+  // weight loss is unsafe (underweight) — fall back to maintenance.
+  if (phase === "recomp") {
+    if (currentTrendWeightKg !== undefined && isLossDisallowed(currentTrendWeightKg, heightCm)) {
+      return {
+        ...maintenance(),
+        warning: "Recomposition uses a small deficit, which isn't advised at your current BMI; showing maintenance calories.",
+      };
+    }
+    const deficit = Math.min(250, Math.round(currentTdee * 0.1));
+    return {
+      calorieTarget: Math.max(CALORIE_TARGET_FLOOR, currentTdee - deficit),
+      tdeeUsed: currentTdee,
+      tdeeSource,
+      rateCapped: false,
+      dateUnachievable: false,
+    };
+  }
 
   // No goal, or we can't anchor to a current weight -> maintenance.
   if (!goal || currentTrendWeightKg === undefined) {

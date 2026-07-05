@@ -21,8 +21,14 @@ async function recomputeQuietly(): Promise<void> {
   }
 }
 
-const PHASE_LABEL: Record<PhaseType, string> = { cut: "Cut (deficit)", maintain: "Maintain", bulk: "Bulk (surplus)" };
-const PHASE_COLOR: Record<PhaseType, string> = { cut: "var(--accent)", maintain: "var(--gold)", bulk: "var(--violet)" };
+const PHASE_LABEL: Record<PhaseType, string> = { cut: "Cut (deficit)", maintain: "Maintain", bulk: "Bulk (surplus)", recomp: "Recomposition" };
+const PHASE_COLOR: Record<PhaseType, string> = { cut: "var(--accent)", maintain: "var(--gold)", bulk: "var(--violet)", recomp: "var(--recomp)" };
+const PHASE_HELP: Record<PhaseType, string> = {
+  cut: "Eat in a deficit toward your weight goal to lose fat.",
+  maintain: "Eat at maintenance (your TDEE) to hold weight steady.",
+  bulk: "Eat in a surplus toward your weight goal to gain.",
+  recomp: "A gentle deficit (~10% of TDEE, max 250 kcal) with high protein + resistance training — lose fat while holding/building muscle. Works best for beginners, higher body fat, or those returning to training.",
+};
 
 function rate(kg: number | null): string {
   if (kg == null) return "—";
@@ -55,9 +61,13 @@ function summaryStats(p: PhaseWithSummary): HTMLElement {
 
 function startForm(onDone: () => void): HTMLElement {
   const type = el("select") as HTMLSelectElement;
-  for (const t of ["cut", "maintain", "bulk"] as PhaseType[]) type.append(el("option", { text: PHASE_LABEL[t], attrs: { value: t } }));
+  for (const t of ["cut", "maintain", "recomp", "bulk"] as PhaseType[]) type.append(el("option", { text: PHASE_LABEL[t], attrs: { value: t } }));
   const date = el("input", { attrs: { type: "date", value: localIsoToday() } }) as HTMLInputElement;
   const note = el("input", { attrs: { type: "text", placeholder: "Note (optional)" } }) as HTMLInputElement;
+  const help = el("p", { class: "muted", attrs: { style: "font-size:12px;margin:-4px 0 12px;line-height:1.5;" }, text: PHASE_HELP[type.value as PhaseType] });
+  type.addEventListener("change", () => {
+    help.textContent = PHASE_HELP[type.value as PhaseType];
+  });
   const msg = el("p", { class: "err" });
   const btn = el("button", { class: "btn small", text: "Start phase" });
   btn.addEventListener("click", async () => {
@@ -79,6 +89,7 @@ function startForm(onDone: () => void): HTMLElement {
     el("h2", { text: "Start a new phase" }),
     el("p", { class: "muted", attrs: { style: "margin:0 0 12px;" }, text: "Starting a phase automatically closes the current one." }),
     el("div", { class: "row2" }, [el("label", { text: "Type" }, [type]), el("label", { text: "Start date" }, [date])]),
+    help,
     el("label", { text: "Note" }, [note]),
     btn,
     msg,

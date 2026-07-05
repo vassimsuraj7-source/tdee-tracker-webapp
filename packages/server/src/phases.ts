@@ -3,7 +3,7 @@ import type { SupabaseClient } from "./db.js";
 import { loadWeights, loadCalories } from "./repository.js";
 import { ValidationError } from "./errors.js";
 
-export type PhaseType = "cut" | "maintain" | "bulk";
+export type PhaseType = "cut" | "maintain" | "bulk" | "recomp";
 
 export interface DietPhase {
   id: string;
@@ -27,7 +27,7 @@ export interface PhaseWithSummary {
   summary: PhaseSummary;
 }
 
-const isPhaseType = (v: string): v is PhaseType => v === "cut" || v === "maintain" || v === "bulk";
+const isPhaseType = (v: string): v is PhaseType => v === "cut" || v === "maintain" || v === "bulk" || v === "recomp";
 
 /** List all phases (most recent first) with a computed summary for each. */
 export async function getPhases(client: SupabaseClient, today: string): Promise<PhaseWithSummary[]> {
@@ -82,7 +82,7 @@ export async function startPhase(
   client: SupabaseClient,
   input: { phaseType: string; startDate: string; note?: string | null },
 ): Promise<void> {
-  if (!isPhaseType(input.phaseType)) throw new ValidationError("phase type must be cut, maintain, or bulk");
+  if (!isPhaseType(input.phaseType)) throw new ValidationError("phase type must be cut, maintain, bulk, or recomp");
   if (!input.startDate) throw new ValidationError("a start date is required");
 
   const { data: openData, error: openErr } = await client

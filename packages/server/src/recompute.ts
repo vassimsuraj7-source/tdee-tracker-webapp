@@ -43,7 +43,7 @@ export async function runRecompute(client: SupabaseClient, today: string): Promi
     loadWeightMainGoal(client),
     client.from("diet_phases").select("phase_type").is("end_date", null).limit(1),
   ]);
-  const currentPhase = (phaseRes.data?.[0]?.phase_type as "cut" | "maintain" | "bulk" | undefined) ?? undefined;
+  const currentPhase = (phaseRes.data?.[0]?.phase_type as "cut" | "maintain" | "bulk" | "recomp" | undefined) ?? undefined;
 
   // 1) Data-driven TDEE across all valid windows.
   const series = computeWindowTdees(weights, calories, today);

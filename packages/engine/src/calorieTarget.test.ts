@@ -22,6 +22,35 @@ describe("calorieTarget", () => {
     expect(r.dateUnachievable).toBe(false);
   });
 
+  it("a recomp phase applies a gentle deficit (~10% of TDEE, capped at 250) with no goal", () => {
+    const r = calorieTarget({
+      ...base,
+      currentTdee: 2600,
+      tdeeSource: "data-driven",
+      currentTrendWeightKg: 82,
+    });
+    const recomp = calorieTarget({
+      ...base,
+      currentTdee: 2600,
+      tdeeSource: "data-driven",
+      currentTrendWeightKg: 82,
+      phase: "recomp",
+    });
+    expect(r.calorieTarget).toBe(2600); // maintenance without a phase
+    expect(recomp.calorieTarget).toBe(2350); // 2600 - min(250, 260) = 2350
+  });
+
+  it("recomp scales the deficit to 10% of a lower TDEE", () => {
+    const recomp = calorieTarget({
+      ...base,
+      currentTdee: 1800,
+      tdeeSource: "estimated",
+      currentTrendWeightKg: 60,
+      phase: "recomp",
+    });
+    expect(recomp.calorieTarget).toBe(1620); // 1800 - min(250, 180) = 1620
+  });
+
   it("a cut phase still defers to the weight goal (produces a deficit)", () => {
     const r = calorieTarget({
       ...base,

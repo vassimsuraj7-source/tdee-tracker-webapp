@@ -67,7 +67,7 @@ function heroCard(root: HTMLElement, d: DashboardData): HTMLElement {
   const rows: HTMLElement[] = [sourcePill(d.tdee.source)];
 
   // Show the active phase so the target's intent is clear.
-  const phaseLabel: Record<string, string> = { cut: "Cut phase", maintain: "Maintain phase", bulk: "Bulk phase" };
+  const phaseLabel: Record<string, string> = { cut: "Cut phase", maintain: "Maintain phase", bulk: "Bulk phase", recomp: "Recomp phase" };
   if (d.phase && phaseLabel[d.phase]) rows.push(el("span", { class: "pill", text: phaseLabel[d.phase]! }));
 
   // Deficit / surplus vs maintenance (TDEE).
@@ -83,7 +83,7 @@ function heroCard(root: HTMLElement, d: DashboardData): HTMLElement {
     ? el("div", { class: "big", html: `${Math.round(t)}<small> kcal</small>` })
     : el("div", { class: "big", text: "—" });
 
-  const phaseClass = d.phase === "maintain" ? " phase-maintain" : d.phase === "bulk" ? " phase-bulk" : "";
+  const phaseClass = d.phase === "maintain" ? " phase-maintain" : d.phase === "bulk" ? " phase-bulk" : d.phase === "recomp" ? " phase-recomp" : "";
   const card = el("div", { class: `card hero tap${phaseClass}` }, [
     el("div", { class: "eyebrow", text: "Eat today" }),
     big,

@@ -512,7 +512,7 @@ export function renderMetricDetail(root: HTMLElement, metric: DetailMetric, onBa
       chartBox,
       ...(metric === "formulas"
         ? []
-        : [el("p", { class: "muted", attrs: { style: "font-size:11px;margin:8px 0 0;" }, html: "Shaded bands = diet phases · <span style=\"color:var(--accent);font-weight:700;\">cut</span> · <span style=\"color:var(--gold);font-weight:700;\">maintain</span> · <span style=\"color:var(--violet);font-weight:700;\">bulk</span>" })]),
+        : [el("p", { class: "muted", attrs: { style: "font-size:11px;margin:8px 0 0;" }, html: "Shaded bands = diet phases · <span style=\"color:var(--accent);font-weight:700;\">cut</span> · <span style=\"color:var(--gold);font-weight:700;\">maintain</span> · <span style=\"color:var(--recomp);font-weight:700;\">recomp</span> · <span style=\"color:var(--violet);font-weight:700;\">bulk</span>" })]),
     ]),
     listBox,
   ];

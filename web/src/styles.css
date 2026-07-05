@@ -11,6 +11,7 @@
   --good: #16a34a;
   --bad: #e0554b;
   --violet: #7c6bd6;
+  --recomp: #0e97a8;
 
   --bg: #eef1f5;
   --bg-grad-a: #eff3f7;
@@ -41,6 +42,7 @@
     --good: #34d399;
     --bad: #f87171;
     --violet: #a99bf0;
+    --recomp: #38c6d6;
 
     --bg: #0b0f14;
     --bg-grad-a: #0d1219;
@@ -140,6 +142,7 @@ header h1 .accent { color: var(--accent); }
 /* Hero tinted by the active diet phase (cut keeps the default green). */
 .hero.phase-maintain { background: linear-gradient(140deg, #e0a83a 0%, #c1861f 55%, #a8741c 100%); box-shadow: 0 12px 34px rgba(200, 150, 40, .32); }
 .hero.phase-bulk { background: linear-gradient(140deg, #7c6bd6 0%, #6152c2 55%, #5344a8 100%); box-shadow: 0 12px 34px rgba(120, 100, 210, .34); }
+.hero.phase-recomp { background: linear-gradient(140deg, #0fb0bf 0%, #0c8b98 55%, #0a7079 100%); box-shadow: 0 12px 34px rgba(15, 150, 168, .32); }
 
 /* ---------- Pills / chips ---------- */
 .pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .2px; }
