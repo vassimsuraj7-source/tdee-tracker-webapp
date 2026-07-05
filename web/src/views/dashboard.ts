@@ -73,6 +73,32 @@ function heroCard(root: HTMLElement, d: DashboardData): HTMLElement {
   return card;
 }
 
+function macroRow(name: string, grams: number, kcal: number, totalKcal: number, color: string): HTMLElement {
+  const pct = totalKcal > 0 ? Math.round((kcal / totalKcal) * 100) : 0;
+  return el("div", { attrs: { style: "margin-bottom:12px;" } }, [
+    el("div", { attrs: { style: "display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px;" } }, [
+      el("span", { text: name }),
+      el("span", { attrs: { style: "color:var(--muted);font-weight:600;" }, html: `<b style="color:var(--text);">${grams} g</b> · ${pct}%` }),
+    ]),
+    el("div", { attrs: { style: "height:8px;border-radius:999px;background:var(--card2);overflow:hidden;" } }, [
+      el("div", { attrs: { style: `height:100%;width:${pct}%;border-radius:999px;background:${color};transition:width .5s ease;` } }),
+    ]),
+  ]);
+}
+
+function macroCard(d: DashboardData): HTMLElement | null {
+  if (!d.macros) return null;
+  const m = d.macros;
+  const total = m.proteinKcal + m.fatKcal + m.carbsKcal;
+  return el("div", { class: "card" }, [
+    el("h2", { text: "Macro targets" }),
+    macroRow("Protein", m.proteinG, m.proteinKcal, total, "var(--accent)"),
+    macroRow("Carbs", m.carbsG, m.carbsKcal, total, "var(--gold)"),
+    macroRow("Fat", m.fatG, m.fatKcal, total, "var(--bad)"),
+    el("p", { class: "muted", attrs: { style: "margin:2px 0 0;" }, text: "Protein-first split from your calorie target and trend weight." }),
+  ]);
+}
+
 function render(root: HTMLElement, d: DashboardData, stale: boolean): void {
   const today = localIsoToday();
   const banners: HTMLElement[] = [];
@@ -99,9 +125,12 @@ function render(root: HTMLElement, d: DashboardData, stale: boolean): void {
     }
   });
 
+  const macros = macroCard(d);
+
   root.replaceChildren(
     ...banners,
     heroCard(root, d),
+    ...(macros ? [macros] : []),
     metricCard(root, "tdee", "TDEE", fmtInt(d.tdee.value, " kcal")),
     metricCard(root, "weight", "Weight · 7-day avg", fmt(d.weight.average7d, 1, " kg"), d.weight.latest ? `latest ${fmt(d.weight.latest.value, 1)} kg` : undefined),
     metricCard(root, "bodyfat", "Body fat · 7-day avg", fmt(bf, 1, "%"), bfLatest),

@@ -1,4 +1,4 @@
-import { addDays } from "@tdee/engine";
+import { addDays, macroTargets, deriveMacroMode, type MacroTargets } from "@tdee/engine";
 import type { SupabaseClient } from "./db.js";
 import { getSyncTimestamp } from "./repository.js";
 import { runRecompute } from "./recompute.js";
@@ -21,6 +21,8 @@ export interface DashboardData {
     dateUnachievable: boolean;
     warning: string | null;
   };
+  /** Derived protein/fat/carb gram targets for the calorie target; null if not computable. */
+  macros: MacroTargets | null;
   syncTimestamp: string | null;
 }
 
@@ -96,6 +98,19 @@ export async function getDashboard(client: SupabaseClient, today: string): Promi
       }
     | undefined;
 
+  // Derive macro targets from the calorie target + trend weight (7-day avg proxy) +
+  // TDEE (to classify deficit/maintenance/surplus). Pure engine call, no DB change.
+  const target = ct?.calorie_target ?? null;
+  const tdeeVal = ct?.tdee_used ?? null;
+  let macros: MacroTargets | null = null;
+  if (target != null && tdeeVal != null && weightAvg != null) {
+    macros = macroTargets({
+      calorieTarget: target,
+      trendWeightKg: weightAvg,
+      mode: deriveMacroMode(target, tdeeVal),
+    }) ?? null;
+  }
+
   return {
     weight: { latest: weightLatest, average7d: weightAvg },
     bodyfat: { latest: bodyfatLatest, average7d: bodyfatAvg },
@@ -108,6 +123,7 @@ export async function getDashboard(client: SupabaseClient, today: string): Promi
       dateUnachievable: ct?.date_unachievable ?? false,
       warning: ct?.warning ?? null,
     },
+    macros,
     syncTimestamp,
   };
 }
