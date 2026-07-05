@@ -188,6 +188,25 @@ function insightsCard(w: WeeklyInsights): HTMLElement | null {
   // Actual weekly weight change (trend-based).
   stats.push(stat("Weight change", rate(w.actualWeeklyRateKg), "trend, last 7 days"));
 
+  // Protein adherence vs recommended range.
+  if (w.avgProtein7d != null) {
+    let note = "avg this week";
+    let color = "var(--text)";
+    if (w.proteinTargetLowG != null && w.proteinTargetHighG != null) {
+      const inRange = w.avgProtein7d >= w.proteinTargetLowG;
+      color = inRange ? "var(--good)" : "var(--gold)";
+      note = inRange ? `≥ ${w.proteinTargetLowG} g target ✓` : `below ${w.proteinTargetLowG}–${w.proteinTargetHighG} g`;
+    }
+    stats.push(stat("Protein", `<span style="color:${color};">${w.avgProtein7d}</span><small style="font-size:12px;font-weight:700;color:var(--muted);"> g</small>`, note));
+  }
+
+  // Fiber adherence vs target.
+  if (w.avgFiber7d != null) {
+    const hit = w.fiberTarget != null && w.avgFiber7d >= w.fiberTarget;
+    const color = w.fiberTarget != null ? (hit ? "var(--good)" : "var(--gold)") : "var(--text)";
+    stats.push(stat("Fiber", `<span style="color:${color};">${w.avgFiber7d}</span><small style="font-size:12px;font-weight:700;color:var(--muted);"> g</small>`, w.fiberTarget != null ? `of ${w.fiberTarget} g target` : "avg this week"));
+  }
+
   // Logged days.
   stats.push(stat("Days logged", `${w.loggedDays7d}<small style="font-size:12px;font-weight:700;color:var(--muted);"> / 7</small>`, "calories this week"));
 

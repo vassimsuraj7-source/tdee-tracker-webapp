@@ -1,4 +1,4 @@
-import { addDays, fillMissingWeightData, trendWeight, KCAL_PER_KG } from "@tdee/engine";
+import { addDays, fillMissingWeightData, trendWeight, macroTargets, deriveMacroMode, fiberTargetG, KCAL_PER_KG } from "@tdee/engine";
 import type { SupabaseClient } from "./db.js";
 import { loadWeights, loadCalories } from "./repository.js";
 
@@ -25,6 +25,13 @@ export interface WeeklyInsights {
   impliedWeeklyRateKg: number | null;
   /** Current trend weight (kg), for reference. */
   trendWeightKg: number | null;
+  /** 7-day average logged protein (g), and the recommended range for context. */
+  avgProtein7d: number | null;
+  proteinTargetLowG: number | null;
+  proteinTargetHighG: number | null;
+  /** 7-day average logged fiber (g), and the daily target (14 g/1000 kcal). */
+  avgFiber7d: number | null;
+  fiberTarget: number | null;
 }
 
 function mean(rows: { value: number }[]): number | null {
@@ -76,6 +83,45 @@ export async function getWeeklyInsights(client: SupabaseClient, today: string): 
   const impliedWeeklyRateKg =
     avgIntake7d != null && tdee != null ? ((avgIntake7d - tdee) * 7) / KCAL_PER_KG : null;
 
+  // Protein & fiber adherence over the last 7 days.
+  const { data: macroData, error: macroErr } = await client
+    .from("calorie_entries")
+    .select("protein_g, fiber_g")
+    .gte("entry_date", start7)
+    .lte("entry_date", today);
+  if (macroErr) throw new Error(macroErr.message);
+  const macroRows = (macroData ?? []) as { protein_g: number | null; fiber_g: number | null }[];
+  const avgCol = (vals: (number | null)[]): number | null => {
+    const nums = vals.filter((v): v is number => v != null && v > 0);
+    return nums.length ? Math.round(nums.reduce((s, v) => s + v, 0) / nums.length) : null;
+  };
+  const avgProtein7d = avgCol(macroRows.map((r) => r.protein_g));
+  const avgFiber7d = avgCol(macroRows.map((r) => r.fiber_g));
+
+  const { data: pData, error: pErr } = await client
+    .from("user_profile")
+    .select("activity_pal")
+    .eq("id", 1)
+    .limit(1);
+  if (pErr) throw new Error(pErr.message);
+  const activityPal = (pData?.[0]?.activity_pal as number | null) ?? 1.55;
+
+  let proteinTargetLowG: number | null = null;
+  let proteinTargetHighG: number | null = null;
+  if (calorieTarget != null && tdee != null && trendNow != null) {
+    const mt = macroTargets({
+      calorieTarget,
+      trendWeightKg: trendNow,
+      activityPal,
+      mode: deriveMacroMode(calorieTarget, tdee),
+    });
+    if (mt) {
+      proteinTargetLowG = mt.protein.lowG;
+      proteinTargetHighG = mt.protein.highG;
+    }
+  }
+  const fiberTarget = calorieTarget != null ? fiberTargetG(calorieTarget) : null;
+
   return {
     avgIntake7d,
     avgIntakePrev7d,
@@ -86,5 +132,10 @@ export async function getWeeklyInsights(client: SupabaseClient, today: string): 
     actualWeeklyRateKg,
     impliedWeeklyRateKg,
     trendWeightKg: trendNow,
+    avgProtein7d,
+    proteinTargetLowG,
+    proteinTargetHighG,
+    avgFiber7d,
+    fiberTarget,
   };
 }
