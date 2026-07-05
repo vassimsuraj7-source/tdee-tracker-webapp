@@ -32,6 +32,9 @@ export interface WeeklyInsights {
   /** 7-day average logged fiber (g), and the daily target (14 g/1000 kcal). */
   avgFiber7d: number | null;
   fiberTarget: number | null;
+  /** Average measured expenditure (TDEE records) this week and the prior week. */
+  avgExpenditure7d: number | null;
+  avgExpenditurePrev7d: number | null;
 }
 
 function mean(rows: { value: number }[]): number | null {
@@ -122,6 +125,18 @@ export async function getWeeklyInsights(client: SupabaseClient, today: string): 
   }
   const fiberTarget = calorieTarget != null ? fiberTargetG(calorieTarget) : null;
 
+  // Average measured expenditure this week vs. the prior week (TDEE records by window end).
+  const { data: tdeeData, error: tdeeErr } = await client
+    .from("tdee_records")
+    .select("window_end, value")
+    .gte("window_end", startPrev)
+    .lte("window_end", today);
+  if (tdeeErr) throw new Error(tdeeErr.message);
+  const tdeeRows = (tdeeData ?? []) as { window_end: string; value: number }[];
+  const meanVals = (vals: number[]): number | null => (vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null);
+  const avgExpenditure7d = meanVals(tdeeRows.filter((r) => inRange(r.window_end, start7, today)).map((r) => r.value));
+  const avgExpenditurePrev7d = meanVals(tdeeRows.filter((r) => inRange(r.window_end, startPrev, endPrev)).map((r) => r.value));
+
   return {
     avgIntake7d,
     avgIntakePrev7d,
@@ -137,5 +152,7 @@ export async function getWeeklyInsights(client: SupabaseClient, today: string): 
     proteinTargetHighG,
     avgFiber7d,
     fiberTarget,
+    avgExpenditure7d,
+    avgExpenditurePrev7d,
   };
 }

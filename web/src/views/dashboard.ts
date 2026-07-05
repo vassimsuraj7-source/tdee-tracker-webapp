@@ -200,6 +200,16 @@ function insightsCard(w: WeeklyInsights): HTMLElement | null {
     stats.push(stat("Avg intake", `${Math.round(w.avgIntake7d)}<small style="font-size:12px;font-weight:700;color:var(--muted);"> kcal</small>`, note));
   }
 
+  // Average measured expenditure with week-over-week delta (metabolic direction).
+  if (w.avgExpenditure7d != null) {
+    let note: string | undefined;
+    if (w.avgExpenditurePrev7d != null) {
+      const delta = w.avgExpenditure7d - w.avgExpenditurePrev7d;
+      note = Math.abs(delta) < 5 ? "same as last week" : `${delta < 0 ? "−" : "+"}${Math.abs(delta)} vs last week`;
+    }
+    stats.push(stat("Expenditure", `${w.avgExpenditure7d}<small style="font-size:12px;font-weight:700;color:var(--muted);"> kcal</small>`, note));
+  }
+
   // Adherence to target.
   if (w.adherencePct != null) {
     const on = w.adherencePct >= 95 && w.adherencePct <= 108;
