@@ -5,6 +5,7 @@ import {
   saveEntry,
   getMainGoal,
   getTdeeHistory,
+  getFormulaComparison,
   type Metric,
   type TimeRange,
   type GoalType,
@@ -28,7 +29,7 @@ function gradientFill(color: string, topAlpha = 0.26) {
 
 const client = () => supabase as never;
 
-type DetailMetric = "weight" | "bodyfat" | "steps" | "calories" | "tdee" | "balance";
+type DetailMetric = "weight" | "bodyfat" | "steps" | "calories" | "tdee" | "balance" | "formulas";
 
 interface Cfg {
   title: string;
@@ -36,7 +37,7 @@ interface Cfg {
   decimals: number;
   scale: number; // display multiplier (body fat fraction -> %)
   goalType?: GoalType;
-  kind: "trend" | "bars" | "macros" | "tdee" | "balance";
+  kind: "trend" | "bars" | "macros" | "tdee" | "balance" | "formulas";
 }
 
 const CFG: Record<DetailMetric, Cfg> = {
@@ -46,6 +47,7 @@ const CFG: Record<DetailMetric, Cfg> = {
   calories: { title: "Calories", unit: "kcal", decimals: 0, scale: 1, kind: "macros" },
   tdee: { title: "TDEE", unit: "kcal", decimals: 0, scale: 1, kind: "tdee" },
   balance: { title: "Energy balance", unit: "kcal", decimals: 0, scale: 1, kind: "balance" },
+  formulas: { title: "Formula comparison", unit: "kcal", decimals: 0, scale: 1, kind: "formulas" },
 };
 
 const chartRegistry = new WeakMap<HTMLCanvasElement, Chart>();
@@ -187,6 +189,78 @@ async function loadChartAndList(
       el("p", { class: "muted", attrs: { style: "margin:8px 0 0;" }, text: "Bars = calories eaten; line = estimated calories burned (TDEE). Bars below the line mean a deficit." }),
     ]);
     listBox.replaceChildren(summary);
+    return;
+  }
+
+  if (metric === "formulas") {
+    const cmp = await getFormulaComparison(client(), today);
+
+    if (cmp.estimates.length === 0) {
+      chartRegistry.get(canvas)?.destroy();
+      listBox.replaceChildren(
+        el("div", { class: "card" }, [
+          el("p", { class: "muted", text: `Add your ${cmp.missing.join(", ")} in Settings to compare against the literature formulas.` }),
+        ]),
+      );
+      return;
+    }
+
+    const labels: string[] = [];
+    const values: number[] = [];
+    const colors: string[] = [];
+    if (cmp.dataDriven.value != null) {
+      labels.push("Your TDEE (measured)");
+      values.push(Math.round(cmp.dataDriven.value));
+      colors.push(c.accent);
+    }
+    for (const e of cmp.estimates) {
+      if (e.tdee != null) {
+        labels.push(e.name);
+        values.push(Math.round(e.tdee));
+        colors.push(withAlpha(c.gold, 0.85));
+      }
+    }
+
+    drawChart(canvas, {
+      type: "bar",
+      data: { labels, datasets: [{ label: "TDEE (kcal)", data: values, backgroundColor: colors, borderRadius: 6, borderSkipped: false, maxBarThickness: 34 }] },
+      options: {
+        indexAxis: "y",
+        plugins: { legend: { display: false } },
+        scales: { x: { grid: { color: c.line }, ticks: { maxTicksLimit: 6 } }, y: { grid: { display: false } } },
+      },
+    });
+
+    const rows: HTMLElement[] = [];
+    if (cmp.dataDriven.value != null) {
+      rows.push(
+        el("div", { class: "list-item" }, [
+          el("span", { class: "k", text: "Your TDEE (measured)" }),
+          el("span", { attrs: { style: "font-weight:800;color:var(--accent);" }, text: `${Math.round(cmp.dataDriven.value)} kcal` }),
+        ]),
+      );
+    }
+    for (const e of cmp.estimates) {
+      rows.push(
+        el("div", { class: "list-item" }, [
+          el("div", {}, [el("div", { class: "k", text: e.name }), el("div", { class: "muted", attrs: { style: "font-size:11px;" }, text: e.basis })]),
+          el("span", { text: e.tdee != null ? `${Math.round(e.tdee)} kcal` : "needs body-fat %" }),
+        ]),
+      );
+    }
+
+    const bfNote = cmp.inputs.bodyFatFraction != null
+      ? ` Body fat ${(cmp.inputs.bodyFatFraction * 100).toFixed(1)}% enables the lean-mass formulas.`
+      : " Log a body-fat % to unlock the Katch-McArdle and Cunningham formulas.";
+
+    listBox.replaceChildren(
+      el("div", { class: "card" }, [
+        el("h2", { text: "TDEE by method" }),
+        ...rows,
+        el("p", { class: "muted", attrs: { style: "margin-top:10px;" }, text: `Estimates = BMR × activity PAL ${cmp.activityPal}.${bfNote}` }),
+        el("p", { class: "muted", attrs: { style: "margin-top:6px;" }, text: "Your measured TDEE comes from your actual intake and weight-trend history — for you personally it's more accurate than any population formula." }),
+      ]),
+    );
     return;
   }
 
@@ -421,12 +495,12 @@ export function renderMetricDetail(root: HTMLElement, metric: DetailMetric, onBa
   const children: (Node | string)[] = [
     el("div", { class: "metric", attrs: { style: "margin-bottom:14px;" } }, [el("h2", { attrs: { style: "margin:0;font-size:19px;color:var(--text);text-transform:none;letter-spacing:-.4px;" }, text: cfg.title }), back]),
     el("div", { class: "card" }, [
-      ...(metric === "tdee" ? [] : [segmented]),
+      ...(metric === "tdee" || metric === "formulas" ? [] : [segmented]),
       chartBox,
     ]),
     listBox,
   ];
-  if (metric !== "tdee" && metric !== "balance") children.push(addForm(metric, () => void reload()));
+  if (metric !== "tdee" && metric !== "balance" && metric !== "formulas") children.push(addForm(metric, () => void reload()));
 
   root.replaceChildren(el("div", { class: "readable" }, children));
   void reload();

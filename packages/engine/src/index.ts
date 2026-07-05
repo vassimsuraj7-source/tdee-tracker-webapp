@@ -14,5 +14,6 @@ export * from "./bmr.js";
 export * from "./guardrails.js";
 export * from "./calorieTarget.js";
 export * from "./macros.js";
+export * from "./formulas.js";
 
 export const ENGINE_VERSION = "0.1.0";
