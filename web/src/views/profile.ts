@@ -1,10 +1,84 @@
-import { getProfile, updateProfile } from "@tdee/server";
+import { getProfile, updateProfile, getFullExport, type FullExport } from "@tdee/server";
 import { ACTIVITY_PAL, type ActivityLevelKey, type Gender } from "@tdee/engine";
 import { supabase } from "../supabase.js";
 import { signOut } from "../auth.js";
 import { el, localIsoToday } from "../util.js";
 
 const client = () => supabase as never;
+
+/** Trigger a browser download of a text blob. */
+function downloadFile(filename: string, text: string, mime: string): void {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Merge all per-metric entries into one daily table and format as CSV. */
+function toDailyCsv(x: FullExport): string {
+  const byDate = new Map<string, Record<string, string | number>>();
+  const ensure = (d: string) => {
+    let row = byDate.get(d);
+    if (!row) {
+      row = { date: d };
+      byDate.set(d, row);
+    }
+    return row;
+  };
+  for (const w of x.weight) ensure(w.entry_date).weight_kg = w.value_kg;
+  for (const b of x.bodyFat) ensure(b.entry_date).body_fat_pct = Math.round(b.value_fraction * 1000) / 10;
+  for (const s of x.steps) ensure(s.entry_date).steps = s.steps;
+  for (const c of x.calories) {
+    const row = ensure(c.entry_date);
+    row.calories = c.calories;
+    if (c.protein_g != null) row.protein_g = c.protein_g;
+    if (c.carbs_g != null) row.carbs_g = c.carbs_g;
+    if (c.fat_g != null) row.fat_g = c.fat_g;
+    if (c.fiber_g != null) row.fiber_g = c.fiber_g;
+  }
+  const cols = ["date", "weight_kg", "body_fat_pct", "steps", "calories", "protein_g", "carbs_g", "fat_g", "fiber_g"];
+  const dates = [...byDate.keys()].sort();
+  const lines = [cols.join(",")];
+  for (const d of dates) {
+    const row = byDate.get(d)!;
+    lines.push(cols.map((c) => (row[c] ?? "")).join(","));
+  }
+  return lines.join("\n");
+}
+
+function exportCard(): HTMLElement {
+  const msg = el("p", { class: "muted", attrs: { style: "margin-top:8px;" } });
+  const csvBtn = el("button", { class: "btn secondary", text: "Export daily data (CSV)" });
+  const jsonBtn = el("button", { class: "btn secondary", attrs: { style: "margin-top:8px;" }, text: "Export full backup (JSON)" });
+
+  const run = async (kind: "csv" | "json") => {
+    msg.textContent = "Preparing…";
+    try {
+      const data = await getFullExport(client());
+      const stamp = localIsoToday();
+      if (kind === "csv") downloadFile(`tdee-daily-${stamp}.csv`, toDailyCsv(data), "text/csv");
+      else downloadFile(`tdee-backup-${stamp}.json`, JSON.stringify(data, null, 2), "application/json");
+      msg.textContent = "Done — check your downloads.";
+    } catch (e) {
+      msg.textContent = e instanceof Error ? `Export failed: ${e.message}` : "Export failed.";
+    }
+  };
+  csvBtn.addEventListener("click", () => void run("csv"));
+  jsonBtn.addEventListener("click", () => void run("json"));
+
+  return el("div", { class: "card" }, [
+    el("h2", { text: "Export & backup" }),
+    el("p", { class: "muted", attrs: { style: "margin:0 0 12px;" }, text: "Download all your data. CSV opens in any spreadsheet; JSON is a complete backup." }),
+    csvBtn,
+    jsonBtn,
+    msg,
+  ]);
+}
 
 const ACTIVITY_LABELS: Record<ActivityLevelKey, string> = {
   sedentary: "Sedentary",
@@ -77,6 +151,7 @@ export async function renderProfile(root: HTMLElement): Promise<void> {
         save,
         msg,
       ]),
+      exportCard(),
       el("div", { class: "card" }, [el("h2", { text: "Account" }), logout]),
     ]),
   );
