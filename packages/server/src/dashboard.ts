@@ -87,6 +87,14 @@ export async function getDashboard(client: SupabaseClient, today: string): Promi
     .eq("id", 1)
     .limit(1);
   if (ctErr) throw new Error(ctErr.message);
+
+  const { data: pData, error: pErr } = await client
+    .from("user_profile")
+    .select("activity_pal")
+    .eq("id", 1)
+    .limit(1);
+  if (pErr) throw new Error(pErr.message);
+  const activityPal = (pData?.[0]?.activity_pal as number | null) ?? 1.55;
   const ct = ctData?.[0] as
     | {
         calorie_target: number | null;
@@ -107,6 +115,7 @@ export async function getDashboard(client: SupabaseClient, today: string): Promi
     macros = macroTargets({
       calorieTarget: target,
       trendWeightKg: weightAvg,
+      activityPal,
       mode: deriveMacroMode(target, tdeeVal),
     }) ?? null;
   }

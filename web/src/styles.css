@@ -249,3 +249,22 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
   .dash-grid { grid-template-columns: repeat(3, 1fr); }
   .dash-grid > .hero { grid-column: 1 / -1; }
 }
+
+/* ---------- Expandable "about" explainer (small, end of page) ---------- */
+.about {
+  margin-top: 6px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--card); padding: 0 15px; font-size: 12px;
+}
+.about summary {
+  cursor: pointer; padding: 12px 0; color: var(--muted); font-weight: 700;
+  list-style: none; user-select: none;
+}
+.about summary::-webkit-details-marker { display: none; }
+.about summary::before { content: "\25B8"; margin-right: 7px; color: var(--faint); }
+.about[open] summary::before { content: "\25BE"; }
+.about-body { padding-bottom: 14px; color: var(--muted); line-height: 1.6; }
+.about-body p { margin: 8px 0; }
+.about-body ul { margin: 8px 0; padding-left: 18px; }
+.about-body li { margin: 6px 0; }
+.about-body b { color: var(--text); }
+.about-body .src { font-size: 11px; opacity: .85; margin-top: 12px; }

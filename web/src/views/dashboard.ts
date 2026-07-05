@@ -81,15 +81,19 @@ function heroCard(root: HTMLElement, d: DashboardData): HTMLElement {
   return card;
 }
 
-function macroRow(name: string, grams: number, kcal: number, totalKcal: number, color: string): HTMLElement {
-  const pct = totalKcal > 0 ? Math.round((kcal / totalKcal) * 100) : 0;
-  return el("div", { attrs: { style: "margin-bottom:12px;" } }, [
+interface MacroRange { lowG: number; highG: number; lowKcal: number; highKcal: number }
+
+function macroRangeRow(name: string, range: MacroRange, target: number, color: string): HTMLElement {
+  const lowPct = target > 0 ? Math.round((range.lowKcal / target) * 100) : 0;
+  const highPct = target > 0 ? Math.round((range.highKcal / target) * 100) : 0;
+  const width = Math.max(3, highPct - lowPct);
+  return el("div", { attrs: { style: "margin-bottom:14px;" } }, [
     el("div", { attrs: { style: "display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px;" } }, [
       el("span", { text: name }),
-      el("span", { attrs: { style: "color:var(--muted);font-weight:600;" }, html: `<b style="color:var(--text);">${grams} g</b> · ${pct}%` }),
+      el("span", { attrs: { style: "color:var(--muted);font-weight:600;" }, html: `<b style="color:var(--text);">${range.lowG}–${range.highG} g</b> · ${lowPct}–${highPct}%` }),
     ]),
-    el("div", { attrs: { style: "height:8px;border-radius:999px;background:var(--card2);overflow:hidden;" } }, [
-      el("div", { attrs: { style: `height:100%;width:${pct}%;border-radius:999px;background:${color};transition:width .5s ease;` } }),
+    el("div", { attrs: { style: "position:relative;height:8px;border-radius:999px;background:var(--card2);overflow:hidden;" } }, [
+      el("div", { attrs: { style: `position:absolute;top:0;bottom:0;left:${lowPct}%;width:${width}%;background:${color};border-radius:999px;` } }),
     ]),
   ]);
 }
@@ -97,14 +101,28 @@ function macroRow(name: string, grams: number, kcal: number, totalKcal: number, 
 function macroCard(d: DashboardData): HTMLElement | null {
   if (!d.macros) return null;
   const m = d.macros;
-  const total = m.proteinKcal + m.fatKcal + m.carbsKcal;
+  const target = d.calorieTarget.value ?? 0;
   return el("div", { class: "card" }, [
     el("h2", { text: "Macro targets" }),
-    macroRow("Protein", m.proteinG, m.proteinKcal, total, "var(--accent)"),
-    macroRow("Carbs", m.carbsG, m.carbsKcal, total, "var(--gold)"),
-    macroRow("Fat", m.fatG, m.fatKcal, total, "var(--bad)"),
-    el("p", { class: "muted", attrs: { style: "margin:2px 0 0;" }, text: "Protein-first split from your calorie target and trend weight." }),
+    macroRangeRow("Protein", m.protein, target, "var(--accent)"),
+    macroRangeRow("Carbs", m.carbs, target, "var(--gold)"),
+    macroRangeRow("Fat", m.fat, target, "var(--bad)"),
+    el("p", { class: "muted", attrs: { style: "margin:2px 0 0;" }, text: `Ranges, not hard limits — anywhere in the band works. Protein ${m.proteinPerKg.low}–${m.proteinPerKg.high} g/kg for your activity level.` }),
   ]);
+}
+
+function aboutCard(): HTMLElement {
+  const body = el("div", { class: "about-body" }, [
+    el("p", { html: "<b>Your calorie target</b> starts from your TDEE — measured from your own calorie intake and weight-trend history (7700 kcal per kg of weight change), or estimated from the Mifflin-St Jeor equation × your activity level until there's enough logged data — then adjusted for your goal at a healthy, BMI-capped weekly rate (never below 1200 kcal)." }),
+    el("p", { html: "<b>Macros are shown as ranges, not fixed numbers</b>, because that's how the evidence is framed:" }),
+    el("ul", {}, [
+      el("li", { html: "<b>Protein</b> is scaled to your body weight and activity. The RDA (0.8 g/kg) only prevents deficiency; active adults do well around 1.2–1.6 g/kg, and the 1.6–2.2 g/kg top end mainly helps resistance training or dieting (to preserve muscle) — you don't need the high end otherwise." }),
+      el("li", { html: "<b>Fat</b> is 20–35% of calories, with a ~0.5 g/kg floor for essential fatty acids and hormonal health." }),
+      el("li", { html: "<b>Carbs</b> fill the remaining calories — there's no strict requirement, so the band is whatever's left." }),
+    ]),
+    el("p", { class: "src", html: "Sources: ISSN Position Stand on Protein &amp; Exercise (2017); Institute of Medicine Acceptable Macronutrient Distribution Ranges; WHO total-fat guidance. Educational only — not medical advice." }),
+  ]);
+  return el("details", { class: "about" }, [el("summary", { text: "How your targets are calculated" }), body]);
 }
 
 function stat(label: string, valueHtml: string, note?: string): HTMLElement {
@@ -228,7 +246,7 @@ function render(root: HTMLElement, d: DashboardData, insights: WeeklyInsights | 
     lastSync,
   ]);
 
-  root.replaceChildren(...banners, grid);
+  root.replaceChildren(...banners, grid, aboutCard());
 }
 
 function skeleton(root: HTMLElement): void {
