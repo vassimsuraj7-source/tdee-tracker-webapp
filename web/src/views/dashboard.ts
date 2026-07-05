@@ -1,9 +1,11 @@
 import {
   getDashboard,
   getWeeklyInsights,
+  getGoalProjection,
   triggerRecompute,
   type DashboardData,
   type WeeklyInsights,
+  type GoalProjectionResult,
 } from "@tdee/server";
 import { supabase } from "../supabase.js";
 import { el, fmt, fmtInt, fmtTimestamp, localIsoToday } from "../util.js";
@@ -195,7 +197,72 @@ function insightsCard(w: WeeklyInsights): HTMLElement | null {
   ]);
 }
 
-function render(root: HTMLElement, d: DashboardData, insights: WeeklyInsights | null, stale: boolean): void {
+function fmtDateLong(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function projectionCard(r: GoalProjectionResult | null): HTMLElement | null {
+  if (!r || !r.hasGoal) return null;
+  const goalKg = r.goalWeightKg != null ? `${r.goalWeightKg.toFixed(1)} kg` : "your goal";
+  const p = r.projection;
+
+  if (!p) {
+    return el("div", { class: "card" }, [
+      el("h2", { text: "Goal projection" }),
+      el("div", { class: "metric" }, [
+        el("div", {}, [el("div", { class: "value", attrs: { style: "font-size:19px;" }, text: "Not enough data yet" }), el("div", { class: "sub", text: `Keep logging weight — a couple of weeks lets me project when you'll hit ${goalKg}.` })]),
+      ]),
+    ]);
+  }
+
+  const rate = p.weeklyRateKg;
+  const rateStr = `${rate < 0 ? "−" : "+"}${Math.abs(rate).toFixed(2)} kg/wk`;
+
+  let mainValue: string;
+  let subText: string;
+  let badge: HTMLElement | null = null;
+
+  switch (p.status) {
+    case "reached":
+      mainValue = "At goal 🎉";
+      subText = `You've reached ${goalKg}.`;
+      break;
+    case "stalled":
+      mainValue = "No ETA";
+      subText = `Weight trend is flat (${rateStr}).`;
+      break;
+    case "wrong_direction":
+      mainValue = "Off track";
+      subText = `Trend is moving away from ${goalKg} (${rateStr}).`;
+      badge = el("span", { class: "pill warn", text: "wrong way" });
+      break;
+    default: {
+      mainValue = `~${fmtDateLong(p.projectedDate)}`;
+      if (p.status === "projecting") {
+        subText = `On pace to reach ${goalKg} · ${rateStr}`;
+      } else {
+        subText = `Reach ${goalKg} · target ${fmtDateLong(r.goalDate)} · ${rateStr}`;
+        const wk = Math.round(Math.abs(p.daysVsGoalDate ?? 0) / 7);
+        if (p.status === "ahead") badge = el("span", { class: "pill data", text: `≈${wk} wk early` });
+        else if (p.status === "behind") badge = el("span", { class: "pill warn", text: `≈${wk} wk late` });
+        else badge = el("span", { class: "pill data", text: "on track" });
+      }
+    }
+  }
+
+  return el("div", { class: "card" }, [
+    el("h2", { text: "Goal projection" }),
+    el("div", { class: "metric" }, [
+      el("div", {}, [el("div", { class: "value", attrs: { style: "font-size:22px;" }, text: mainValue }), el("div", { class: "sub", text: subText })]),
+      ...(badge ? [el("div", {}, [badge])] : []),
+    ]),
+  ]);
+}
+
+function render(root: HTMLElement, d: DashboardData, insights: WeeklyInsights | null, projection: GoalProjectionResult | null, stale: boolean): void {
   const today = localIsoToday();
   const banners: HTMLElement[] = [];
   if (stale) banners.push(el("div", { class: "banner warn", text: "Offline — showing the last data loaded. It may be out of date." }));
@@ -253,9 +320,12 @@ function render(root: HTMLElement, d: DashboardData, insights: WeeklyInsights | 
   ]);
   formulasCard.addEventListener("click", () => open(root, "formulas"));
 
+  const proj = projectionCard(projection);
+
   const grid = el("div", { class: "dash-grid" }, [
     heroCard(root, d),
     ...(macros ? [macros] : []),
+    ...(proj ? [proj] : []),
     ...(week ? [week] : []),
     balanceCard,
     formulasCard,
@@ -283,25 +353,27 @@ function skeleton(root: HTMLElement): void {
 interface CachedPayload {
   d: DashboardData;
   insights: WeeklyInsights | null;
+  projection: GoalProjectionResult | null;
 }
 
 async function load(root: HTMLElement): Promise<void> {
   skeleton(root);
   const today = localIsoToday();
   try {
-    const [data, insights] = await Promise.all([
+    const [data, insights, projection] = await Promise.all([
       getDashboard(supabase as never, today),
       getWeeklyInsights(supabase as never, today).catch(() => null),
+      getGoalProjection(supabase as never, today).catch(() => null),
     ]);
-    localStorage.setItem(LAST_KEY, JSON.stringify({ d: data, insights } satisfies CachedPayload));
-    render(root, data, insights, false);
+    localStorage.setItem(LAST_KEY, JSON.stringify({ d: data, insights, projection } satisfies CachedPayload));
+    render(root, data, insights, projection, false);
   } catch {
     const cached = localStorage.getItem(LAST_KEY);
     if (cached) {
       const parsed = JSON.parse(cached) as CachedPayload | DashboardData;
       // Support both the new combined shape and any older cache (dashboard-only).
-      if ("d" in parsed) render(root, parsed.d, parsed.insights, true);
-      else render(root, parsed, null, true);
+      if ("d" in parsed) render(root, parsed.d, parsed.insights, parsed.projection ?? null, true);
+      else render(root, parsed, null, null, true);
     } else {
       root.replaceChildren(el("div", { class: "card" }, [el("p", { class: "err", text: "Could not load dashboard and no cached data is available." })]));
     }
