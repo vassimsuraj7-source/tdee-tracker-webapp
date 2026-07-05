@@ -2,7 +2,7 @@
 
 ## Overview
 
-This plan builds the free-first stack: Supabase (Free tier) for Postgres + Edge Functions + pg_cron + Auth, an Apple Shortcuts export bridge, and a static PWA on GitHub Pages / Supabase hosting. Tasks are ordered so the pure calculation logic (highest value, fully unit-testable) is built and verified before it is wired to the database and UI. Each task builds on prior tasks and ends in working, tested code.
+This plan builds the free-first stack: Supabase (Free tier) for Postgres + Edge Functions + pg_cron + Auth, an Apple Shortcuts export bridge, and a static PWA on GitHub Pages (any free static host works; Supabase itself does not serve static sites). Tasks are ordered so the pure calculation logic (highest value, fully unit-testable) is built and verified before it is wired to the database and UI. Each task builds on prior tasks and ends in working, tested code.
 
 ## Tasks
 
@@ -140,9 +140,12 @@ This plan builds the free-first stack: Supabase (Free tier) for Postgres + Edge 
   - **User action to finish:** build the Shortcut on the phone per the guide, run it once to confirm `{"affected":["<today>"]}`, then schedule the two automations.
   - _Requirements: 2.1-2.6, 5.1-5.2_
 
-- [~] 14. End-to-end verification and deployment
-  - **Done: migrations applied, both Edge Functions deployed, nightly recompute scheduled (pg_cron), ingestion verified end-to-end (real Shortcut POST landed 50 kg in the DB), secrets in Supabase/Vault (nothing in source), TLS end-to-end. Production PWA bundle built to `web/dist` (self-contained, publishable key only).**
-  - **User action to finish:** deploy `web/dist` via Netlify Drop (drag-drop, free HTTPS), then Add-to-Home-Screen on iPhone. Rebuild + re-drag on future code changes (or claim site + connect git for auto-deploy).
+- [x] 14. End-to-end verification and deployment
+  - **Done: migrations applied, both Edge Functions deployed, nightly recompute scheduled (pg_cron), ingestion verified end-to-end (real Shortcut POST landed 50 kg in the DB), secrets in Supabase/Vault (nothing in source), TLS end-to-end.**
+  - **Deployed live on GitHub Pages** via `.github/workflows/deploy.yml` (builds engine → server → web, publishes `web/dist`). Public repo `vassimsuraj7-source/tdee-tracker-webapp`; the two client-safe values (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) are set as repo **Variables** (not Secrets); Pages source = GitHub Actions. Made the bundle subpath-safe (`base: "./"`, relative manifest/icon/SW paths) so it works under the `/tdee-tracker-webapp/` project-site path.
+  - **Secret hygiene verified before push**: only the publishable/anon key + project URL are in the repo; the service-role JWT lives solely in the gitignored `.env`. Confirmed via a JWT-pattern scan across all tracked files.
+  - **Verified live**: app serves at `https://vassimsuraj7-source.github.io/tdee-tracker-webapp/`; owner logged in and saw real dashboard data. The `spec/` folder + a reusable-project README were committed so others can run it against their own Supabase.
+  - CI fix: declared `@types/node` as a `@tdee/server` devDependency (it was only working locally via hoisting; `npm ci` on CI needs it in the lockfile).
   - Free-tier caveat: the project auto-pauses after ~7 days of no traffic; the twice-daily sync keeps it active; unpause from the dashboard if it ever sleeps.
   - _Requirements: 22.1-22.2, 5.4, plus end-to-end coverage of all requirements_
 
