@@ -50,8 +50,16 @@ const CFG: Record<DetailMetric, Cfg> = {
 const chartRegistry = new WeakMap<HTMLCanvasElement, Chart>();
 function drawChart(canvas: HTMLCanvasElement, config: ChartConfiguration): void {
   chartRegistry.get(canvas)?.destroy();
-  const chart = new Chart(canvas, config);
-  chartRegistry.set(canvas, chart);
+  // Ensure responsive sizing regardless of global defaults.
+  config.options = { responsive: true, maintainAspectRatio: false, ...(config.options ?? {}) };
+  try {
+    const chart = new Chart(canvas, config);
+    chartRegistry.set(canvas, chart);
+  } catch (e) {
+    // Surface the real error on screen instead of failing silently.
+    const box = canvas.parentElement;
+    if (box) box.replaceChildren(el("p", { class: "err", text: "Chart error: " + (e instanceof Error ? e.message : String(e)) }));
+  }
 }
 
 async function currentTdee(): Promise<number | null> {
