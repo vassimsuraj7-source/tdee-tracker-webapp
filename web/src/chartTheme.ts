@@ -1,4 +1,4 @@
-import { Chart, type ScaleOptionsByType } from "chart.js";
+import { Chart } from "chart.js";
 
 /** Read a CSS custom property off :root, with a fallback. */
 function cssVar(name: string, fallback: string): string {
@@ -33,18 +33,17 @@ export function themeColors(): ThemeColors {
 }
 
 let applied = false;
-/** Apply global Chart.js defaults once (fonts, tooltip, legend styling). */
+/**
+ * Apply cosmetic global Chart.js defaults once (fonts, legend, tooltip only).
+ * Deliberately does NOT touch responsive/maintainAspectRatio/scales/animation —
+ * those are layout-affecting and are set explicitly per chart to avoid surprises.
+ */
 export function applyChartDefaults(): void {
   if (applied) return;
   applied = true;
   const c = themeColors();
   Chart.defaults.font.family = "'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif";
-  Chart.defaults.font.size = 12;
   Chart.defaults.color = c.muted;
-  Chart.defaults.borderColor = c.line;
-  Chart.defaults.maintainAspectRatio = false;
-  Chart.defaults.responsive = true;
-  Chart.defaults.animation = { duration: 550, easing: "easeOutQuart" };
 
   const legend = Chart.defaults.plugins.legend;
   legend.labels.usePointStyle = true;
@@ -52,19 +51,12 @@ export function applyChartDefaults(): void {
   legend.labels.boxWidth = 7;
   legend.labels.boxHeight = 7;
   legend.labels.padding = 16;
-  legend.labels.font = { size: 12, weight: 600 };
 
   const tip = Chart.defaults.plugins.tooltip;
-  tip.backgroundColor = themeColors().text;
-  tip.titleColor = themeColors().card;
-  tip.bodyColor = themeColors().card;
   tip.padding = 10;
   tip.cornerRadius = 10;
-  tip.displayColors = true;
   tip.usePointStyle = true;
   tip.boxPadding = 4;
-  tip.titleFont = { weight: 700, size: 12 };
-  tip.bodyFont = { size: 12 };
 }
 
 /** A soft top-down gradient fill for area/line charts. */
@@ -95,19 +87,11 @@ export function withAlpha(color: string, alpha: number): string {
   return c;
 }
 
-/** Standard cartesian scales: hidden x grid, soft dashed y grid, no axis borders. */
-export function baseScales(c: ThemeColors, yBeginAtZero = false): Record<string, Partial<ScaleOptionsByType<"linear" | "category">>> {
+/** Standard cartesian scales: hidden x gridlines, soft y gridlines. Kept minimal
+ *  (no `border`/font overrides) so layout matches Chart.js defaults exactly. */
+export function baseScales(c: ThemeColors, yBeginAtZero = false): Record<string, unknown> {
   return {
-    x: {
-      grid: { display: false },
-      border: { display: false },
-      ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6, color: c.muted, font: { size: 11 } },
-    } as never,
-    y: {
-      beginAtZero: yBeginAtZero,
-      grid: { color: c.line },
-      border: { display: false },
-      ticks: { color: c.muted, font: { size: 11 }, maxTicksLimit: 6, padding: 6 },
-    } as never,
+    x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6 } },
+    y: { beginAtZero: yBeginAtZero, grid: { color: c.line } },
   };
 }

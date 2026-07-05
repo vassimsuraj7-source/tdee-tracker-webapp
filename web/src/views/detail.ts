@@ -173,7 +173,7 @@ async function loadChartAndList(
           {
             label: cfg.title,
             data: rows.map((r) => r.value),
-            backgroundColor: gradientFill(c.accent, 0.95),
+            backgroundColor: c.accent,
             borderRadius: 6,
             borderSkipped: false,
             maxBarThickness: 26,
