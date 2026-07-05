@@ -11,9 +11,10 @@ import { renderMetricDetail } from "./detail.js";
 
 const LAST_KEY = "tdee:last-dashboard";
 
-type DetailMetric = "weight" | "bodyfat" | "steps" | "calories" | "tdee";
+type DetailMetric = "weight" | "bodyfat" | "steps" | "calories" | "tdee" | "balance";
 
 const ICONS: Record<DetailMetric, string> = {
+  balance: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 21h10M12 6l7 2-2.5 5a3 3 0 0 1-4.5 0zM12 6 5 8l2.5 5a3 3 0 0 0 4.5 0z"/></svg>',
   tdee: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13H11l-1 9 8.5-11H12z"/></svg>',
   weight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20a8 8 0 0 1 16 0z"/><path d="M12 8l2-3"/><circle cx="12" cy="8" r="1.3" fill="currentColor"/></svg>',
   bodyfat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>',
@@ -190,10 +191,22 @@ function render(root: HTMLElement, d: DashboardData, insights: WeeklyInsights | 
     el("div", { class: "sub" }, [recomputeMsg]),
   ]);
 
+  const balanceCard = el("div", { class: "card tap" }, [
+    el("div", { class: "metric" }, [
+      el("div", { class: "lead" }, [
+        el("div", { class: "mi", html: ICONS.balance }),
+        el("div", {}, [el("div", { class: "value", attrs: { style: "font-size:19px;" }, text: "Intake vs burn" }), el("div", { class: "sub", text: "deficit / surplus over time" })]),
+      ]),
+      el("div", {}, [el("div", { class: "label", text: "Energy balance" }), el("span", { class: "chev", text: "View ›" })]),
+    ]),
+  ]);
+  balanceCard.addEventListener("click", () => open(root, "balance"));
+
   const grid = el("div", { class: "dash-grid" }, [
     heroCard(root, d),
     ...(macros ? [macros] : []),
     ...(week ? [week] : []),
+    balanceCard,
     metricCard(root, "tdee", "TDEE", fmtInt(d.tdee.value, " kcal")),
     metricCard(root, "weight", "Weight · 7-day avg", fmt(d.weight.average7d, 1, " kg"), d.weight.latest ? `latest ${fmt(d.weight.latest.value, 1)} kg` : undefined),
     metricCard(root, "bodyfat", "Body fat · 7-day avg", fmt(bf, 1, "%"), bfLatest),

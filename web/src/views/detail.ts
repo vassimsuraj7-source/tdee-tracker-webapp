@@ -28,7 +28,7 @@ function gradientFill(color: string, topAlpha = 0.26) {
 
 const client = () => supabase as never;
 
-type DetailMetric = "weight" | "bodyfat" | "steps" | "calories" | "tdee";
+type DetailMetric = "weight" | "bodyfat" | "steps" | "calories" | "tdee" | "balance";
 
 interface Cfg {
   title: string;
@@ -36,7 +36,7 @@ interface Cfg {
   decimals: number;
   scale: number; // display multiplier (body fat fraction -> %)
   goalType?: GoalType;
-  kind: "trend" | "bars" | "macros" | "tdee";
+  kind: "trend" | "bars" | "macros" | "tdee" | "balance";
 }
 
 const CFG: Record<DetailMetric, Cfg> = {
@@ -45,6 +45,7 @@ const CFG: Record<DetailMetric, Cfg> = {
   steps: { title: "Steps", unit: "", decimals: 0, scale: 1, kind: "bars" },
   calories: { title: "Calories", unit: "kcal", decimals: 0, scale: 1, kind: "macros" },
   tdee: { title: "TDEE", unit: "kcal", decimals: 0, scale: 1, kind: "tdee" },
+  balance: { title: "Energy balance", unit: "kcal", decimals: 0, scale: 1, kind: "balance" },
 };
 
 const chartRegistry = new WeakMap<HTMLCanvasElement, Chart>();
@@ -103,6 +104,89 @@ async function loadChartAndList(
     listBox.replaceChildren(
       el("p", { class: "muted", text: `${history.length} calculated windows.` }),
     );
+    return;
+  }
+
+  if (metric === "balance") {
+    // Overlay daily intake (bars) against expenditure/TDEE (line) so the
+    // deficit/surplus gap is visible. Expenditure per day = the most recent
+    // TDEE_Record effective on or before that day (carried forward).
+    const cals = (await listEntries(client(), "calories", range, today)).filter((e) => e.value > 0);
+    const history = await getTdeeHistory(client());
+    const sorted = [...history].sort((a, b) => (a.windowEnd < b.windowEnd ? -1 : 1));
+    const expenditureOn = (date: string): number | null => {
+      let v: number | null = null;
+      for (const h of sorted) {
+        if (h.windowEnd <= date) v = h.value;
+        else break;
+      }
+      return v;
+    };
+    const labels = cals.map((r) => r.date);
+    const intake = cals.map((r) => Math.round(r.value));
+    const expenditure = cals.map((r) => {
+      const e = expenditureOn(r.date);
+      return e == null ? null : Math.round(e);
+    });
+
+    drawChart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            type: "bar",
+            label: "Intake",
+            data: intake,
+            backgroundColor: withAlpha(c.accent, 0.5),
+            borderRadius: 4,
+            borderSkipped: false,
+            maxBarThickness: 22,
+            order: 2,
+          },
+          {
+            type: "line",
+            label: "Expenditure (TDEE)",
+            data: expenditure,
+            borderColor: c.gold,
+            backgroundColor: withAlpha(c.gold, 0.12),
+            fill: false,
+            tension: 0.35,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            borderWidth: 2.5,
+            spanGaps: true,
+            order: 1,
+          },
+        ] as never,
+      },
+      options: { plugins: { legend: { display: true } }, scales: baseScales(c, true) as never, interaction: { mode: "index", intersect: false } },
+    });
+
+    const valExp = expenditure.filter((x): x is number => x != null);
+    const avgIn = intake.length ? Math.round(intake.reduce((s, x) => s + x, 0) / intake.length) : null;
+    const avgExp = valExp.length ? Math.round(valExp.reduce((s, x) => s + x, 0) / valExp.length) : null;
+    const net = avgIn != null && avgExp != null ? avgIn - avgExp : null;
+    const wk = net != null ? (net * 7) / 7700 : null;
+
+    const summary = el("div", { class: "card" }, [
+      el("h2", { text: "Over this range" }),
+      el("div", { class: "list-item" }, [el("span", { class: "k", text: "Avg intake" }), el("span", { text: avgIn != null ? `${avgIn} kcal` : "—" })]),
+      el("div", { class: "list-item" }, [el("span", { class: "k", text: "Avg expenditure" }), el("span", { text: avgExp != null ? `${avgExp} kcal` : "—" })]),
+      el("div", { class: "list-item" }, [
+        el("span", { class: "k", text: "Net balance" }),
+        el("span", {
+          attrs: { style: `font-weight:800;color:${net == null ? "var(--muted)" : net < 0 ? "var(--good)" : "var(--bad)"};` },
+          text: net != null ? `${net < 0 ? "−" : "+"}${Math.abs(net)} kcal/day` : "—",
+        }),
+      ]),
+      el("div", { class: "list-item" }, [
+        el("span", { class: "k", text: "Implied rate" }),
+        el("span", { text: wk != null ? `${wk < 0 ? "−" : "+"}${Math.abs(wk).toFixed(2)} kg/week` : "—" }),
+      ]),
+      el("p", { class: "muted", attrs: { style: "margin:8px 0 0;" }, text: "Bars = calories eaten; line = estimated calories burned (TDEE). Bars below the line mean a deficit." }),
+    ]);
+    listBox.replaceChildren(summary);
     return;
   }
 
@@ -342,7 +426,7 @@ export function renderMetricDetail(root: HTMLElement, metric: DetailMetric, onBa
     ]),
     listBox,
   ];
-  if (metric !== "tdee") children.push(addForm(metric, () => void reload()));
+  if (metric !== "tdee" && metric !== "balance") children.push(addForm(metric, () => void reload()));
 
   root.replaceChildren(el("div", { class: "readable" }, children));
   void reload();
