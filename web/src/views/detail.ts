@@ -14,19 +14,10 @@ import {
 import { fillMissingWeightData, trendWeight } from "@tdee/engine";
 import { supabase } from "../supabase.js";
 import { el, fmt, fmtInt, localIsoToday } from "../util.js";
-import { applyChartDefaults, themeColors, areaGradient, withAlpha, baseScales, phaseBandsPlugin, type PhaseBand } from "../chartTheme.js";
+import { applyChartDefaults, themeColors, withAlpha, baseScales, phaseBandsPlugin, type PhaseBand } from "../chartTheme.js";
 
 Chart.register(...registerables);
 applyChartDefaults();
-
-/** Scriptable background: a soft vertical gradient filling to the chart baseline. */
-function gradientFill(color: string, topAlpha = 0.26) {
-  return (context: { chart: Chart }): CanvasGradient | string => {
-    const { ctx, chartArea } = context.chart;
-    if (!chartArea) return withAlpha(color, topAlpha);
-    return areaGradient(ctx, chartArea.bottom, chartArea.top, color, topAlpha);
-  };
-}
 
 const client = () => supabase as never;
 
@@ -100,8 +91,7 @@ async function loadChartAndList(
             label: "TDEE (kcal)",
             data: history.map((h) => Math.round(h.value)),
             borderColor: c.accent,
-            backgroundColor: gradientFill(c.accent),
-            fill: true,
+            fill: false,
             tension: 0.35,
             pointRadius: 0,
             pointHoverRadius: 5,
@@ -309,8 +299,7 @@ async function loadChartAndList(
         label: "Trend (7-day avg)",
         data: trend,
         borderColor: c.accent,
-        backgroundColor: gradientFill(c.accent, 0.18),
-        fill: true,
+        fill: false,
         pointRadius: 0,
         pointHoverRadius: 4,
         tension: 0.35,
