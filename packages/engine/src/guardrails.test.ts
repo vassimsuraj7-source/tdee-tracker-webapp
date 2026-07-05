@@ -6,9 +6,22 @@ import {
   suggestTargetDateWeeks,
   suggestTargetDate,
   isLossDisallowed,
+  healthyWeightRangeKg,
   MIN_GOAL_WEEKS,
   MAX_GOAL_WEEKS,
 } from "./guardrails.js";
+
+describe("healthyWeightRangeKg", () => {
+  it("derives the WHO healthy BMI band (18.5–24.9) for a height", () => {
+    const r = healthyWeightRangeKg(180);
+    // 1.8 m: 18.5*3.24=59.94 -> 60.0 ; 24.9*3.24=80.68 -> 80.5
+    expect(r.lowKg).toBe(60);
+    expect(r.highKg).toBe(80.5);
+    expect(r.lowKg).toBeLessThan(r.highKg);
+    // Midpoint is rounded to 0.5 kg, so allow a half-kg of slack.
+    expect(Math.abs(r.midpointKg - (r.lowKg + r.highKg) / 2)).toBeLessThanOrEqual(0.5);
+  });
+});
 
 describe("bmi", () => {
   it("computes BMI from kg and cm", () => {

@@ -5,12 +5,13 @@ import {
   addSubgoal,
   completeSubgoal,
   deleteSubgoal,
+  getIdealWeightSuggestion,
   MAIN_GOAL_ORDER,
   type GoalType,
   type GoalRow,
 } from "@tdee/server";
 import { supabase } from "../supabase.js";
-import { el, fmt } from "../util.js";
+import { el, fmt, localIsoToday } from "../util.js";
 
 const client = () => supabase as never;
 
@@ -51,6 +52,48 @@ function goalForm(
     btn,
     msg,
   ]);
+}
+
+async function healthyWeightCard(container: HTMLElement): Promise<HTMLElement> {
+  const s = await getIdealWeightSuggestion(client(), localIsoToday());
+  const caveat = el("p", { class: "muted", attrs: { style: "font-size:11px;margin:10px 0 0;line-height:1.5;" }, html: "BMI is a population screen, not a body-composition measure — with your body-fat data, treat this as a rough guide, not a verdict." });
+
+  if (s.missing.length > 0 || s.lowKg == null || s.highKg == null) {
+    return el("div", { class: "card" }, [
+      el("h2", { text: "Healthy weight range" }),
+      el("p", { class: "muted", text: `Add your ${s.missing.join(", ")} in Settings to see your healthy weight range.` }),
+    ]);
+  }
+
+  const children: (Node | string)[] = [
+    el("h2", { text: "Healthy weight range" }),
+    el("div", { class: "metric" }, [
+      el("div", { class: "value", attrs: { style: "font-size:22px;" }, text: `${s.lowKg}–${s.highKg} kg` }),
+      el("div", { class: "label", text: "BMI 18.5–24.9" }),
+    ]),
+  ];
+
+  if (s.currentWeightKg != null) {
+    const bmiTxt = s.currentBmi != null ? ` (BMI ${s.currentBmi.toFixed(1)})` : "";
+    let statusTxt: string;
+    if (s.inRange) statusTxt = `You're at ${s.currentWeightKg.toFixed(1)} kg${bmiTxt} — within the healthy range ✓`;
+    else if (s.currentWeightKg > s.highKg) statusTxt = `You're at ${s.currentWeightKg.toFixed(1)} kg${bmiTxt} — above the range.`;
+    else statusTxt = `You're at ${s.currentWeightKg.toFixed(1)} kg${bmiTxt} — below the range.`;
+    children.push(el("p", { class: "muted", attrs: { style: "margin:8px 0 0;" }, text: statusTxt }));
+
+    if (!s.inRange && s.suggestedTargetKg != null) {
+      const btn = el("button", { class: "btn small", attrs: { style: "margin-top:10px;" }, text: `Set ${s.suggestedTargetKg} kg as main goal` });
+      btn.addEventListener("click", async () => {
+        await setMainGoal(client(), "weight", { targetValue: s.suggestedTargetKg as number, goalDate: s.suggestedDate });
+        await load(container, "weight");
+      });
+      children.push(btn);
+      if (s.suggestedDate) children.push(el("p", { class: "muted", attrs: { style: "font-size:12px;margin:6px 0 0;" }, text: `Suggested date at a healthy pace: ${s.suggestedDate}` }));
+    }
+  }
+
+  children.push(caveat);
+  return el("div", { class: "card" }, children);
 }
 
 async function load(container: HTMLElement, metric: GoalType): Promise<void> {
@@ -111,7 +154,11 @@ async function load(container: HTMLElement, metric: GoalType): Promise<void> {
     }),
   ]);
 
-  container.replaceChildren(mainSection, subSection);
+  if (metric === "weight") {
+    container.replaceChildren(await healthyWeightCard(container), mainSection, subSection);
+  } else {
+    container.replaceChildren(mainSection, subSection);
+  }
 }
 
 export function renderGoals(root: HTMLElement): void {

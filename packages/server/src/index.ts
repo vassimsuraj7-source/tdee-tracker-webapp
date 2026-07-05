@@ -14,3 +14,4 @@ export * from "./projection.js";
 export * from "./outliers.js";
 export * from "./plateau.js";
 export * from "./dataQuality.js";
+export * from "./idealWeight.js";

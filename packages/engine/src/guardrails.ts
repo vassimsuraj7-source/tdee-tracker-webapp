@@ -13,13 +13,38 @@ export function bmi(weightKg: number, heightCm: number): number {
 
 /**
  * Suggested healthy target weight (Req 10.1): BMI 21.7 midpoint, +5% for males,
- * rounded to the nearest 0.5 kg.
+ * rounded to the nearest 0.5 kg. Retained for continuity with the native app, but
+ * prefer `healthyWeightRangeKg` — there is no single "ideal" weight, only a range.
  */
 export function idealWeightKg(heightCm: number, gender: Gender): number {
   const h = heightCm / 100;
   let w = 21.7 * h * h;
   if (gender === "male") w *= 1.05;
   return Math.round(w * 2) / 2;
+}
+
+/** WHO healthy BMI bounds. */
+export const HEALTHY_BMI_LOW = 18.5;
+export const HEALTHY_BMI_HIGH = 24.9;
+
+export interface HealthyWeightRange {
+  readonly lowKg: number;
+  readonly highKg: number;
+  /** Neutral middle of the healthy range (not an "ideal"), rounded to 0.5 kg. */
+  readonly midpointKg: number;
+}
+
+/**
+ * Healthy weight *range* for a height, from the WHO healthy BMI band (18.5–24.9),
+ * rounded to the nearest 0.5 kg. BMI is a population screen, not a body-composition
+ * measure — so this is a guide, not a verdict.
+ */
+export function healthyWeightRangeKg(heightCm: number): HealthyWeightRange {
+  const h = heightCm / 100;
+  const round = (w: number): number => Math.round(w * 2) / 2;
+  const lowKg = round(HEALTHY_BMI_LOW * h * h);
+  const highKg = round(HEALTHY_BMI_HIGH * h * h);
+  return { lowKg, highKg, midpointKg: round((lowKg + highKg) / 2) };
 }
 
 /** Permitted weekly weight-change magnitudes (kg/week) for the user's BMI tier. */
