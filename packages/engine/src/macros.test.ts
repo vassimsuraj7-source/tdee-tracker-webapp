@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { macroTargets, deriveMacroMode } from "./macros.js";
+import { macroTargets, deriveMacroMode, fiberTargetG } from "./macros.js";
+
+describe("fiberTargetG", () => {
+  it("uses 14 g per 1000 kcal (IOM AI)", () => {
+    expect(fiberTargetG(2000)).toBe(28);
+    expect(fiberTargetG(2600)).toBe(36);
+    expect(fiberTargetG(0)).toBeNull();
+  });
+});
 
 describe("deriveMacroMode", () => {
   it("classifies deficit / maintenance / surplus around TDEE", () => {

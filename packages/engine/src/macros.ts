@@ -48,6 +48,16 @@ export interface MacroTargets {
   readonly fatPercent: { readonly low: number; readonly high: number };
 }
 
+/**
+ * Recommended daily fiber (g), per the IOM Adequate Intake of 14 g per 1000 kcal.
+ * Fiber aids weight management via satiety, slowed gastric emptying, a blunted
+ * glycemic response, and gut-microbiome effects. Returns null for invalid input.
+ */
+export function fiberTargetG(calorieTargetKcal: number): number | null {
+  if (!Number.isFinite(calorieTargetKcal) || calorieTargetKcal <= 0) return null;
+  return Math.round((14 * calorieTargetKcal) / 1000);
+}
+
 /** Classify the plan relative to maintenance (TDEE) to pick the protein band. */
 export function deriveMacroMode(calorieTarget: number, tdee: number): MacroGoalMode {
   if (calorieTarget < tdee - 30) return "loss";

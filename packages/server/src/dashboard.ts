@@ -1,4 +1,4 @@
-import { addDays, macroTargets, deriveMacroMode, type MacroTargets } from "@tdee/engine";
+import { addDays, macroTargets, deriveMacroMode, fiberTargetG, type MacroTargets } from "@tdee/engine";
 import type { SupabaseClient } from "./db.js";
 import { getSyncTimestamp } from "./repository.js";
 import { runRecompute } from "./recompute.js";
@@ -23,6 +23,8 @@ export interface DashboardData {
   };
   /** Derived protein/fat/carb gram targets for the calorie target; null if not computable. */
   macros: MacroTargets | null;
+  /** Daily fiber target (14 g/1000 kcal) and recent average intake. */
+  fiber: { target: number | null; average7d: number | null };
   syncTimestamp: string | null;
 }
 
@@ -120,6 +122,20 @@ export async function getDashboard(client: SupabaseClient, today: string): Promi
     }) ?? null;
   }
 
+  // Fiber: target (14 g/1000 kcal) + 7-day average of logged fiber.
+  const fiberTarget = target != null ? fiberTargetG(target) : null;
+  const fiberStart = addDays(today, -6);
+  const { data: fibData, error: fibErr } = await client
+    .from("calorie_entries")
+    .select("fiber_g")
+    .gte("entry_date", fiberStart)
+    .lte("entry_date", today);
+  if (fibErr) throw new Error(fibErr.message);
+  const fiberVals = ((fibData ?? []) as { fiber_g: number | null }[])
+    .map((r) => r.fiber_g)
+    .filter((v): v is number => v != null && v > 0);
+  const fiberAvg7d = fiberVals.length ? Math.round(fiberVals.reduce((s, v) => s + v, 0) / fiberVals.length) : null;
+
   return {
     weight: { latest: weightLatest, average7d: weightAvg },
     bodyfat: { latest: bodyfatLatest, average7d: bodyfatAvg },
@@ -133,6 +149,7 @@ export async function getDashboard(client: SupabaseClient, today: string): Promi
       warning: ct?.warning ?? null,
     },
     macros,
+    fiber: { target: fiberTarget, average7d: fiberAvg7d },
     syncTimestamp,
   };
 }

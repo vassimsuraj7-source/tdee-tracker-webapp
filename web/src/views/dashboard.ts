@@ -98,6 +98,25 @@ function macroRangeRow(name: string, range: MacroRange, target: number, color: s
   ]);
 }
 
+function fiberRow(target: number | null, avg: number | null): HTMLElement {
+  const hit = target != null && avg != null && avg >= target;
+  const pct = target != null && target > 0 && avg != null ? Math.min(100, Math.round((avg / target) * 100)) : null;
+  const right = target == null
+    ? "—"
+    : `${avg != null ? `avg <b style="color:${hit ? "var(--good)" : "var(--text)"};">${avg} g</b> · ` : ""}target ${target} g`;
+  return el("div", { attrs: { style: "margin-top:4px;padding-top:13px;border-top:1px solid var(--line);" } }, [
+    el("div", { attrs: { style: "display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px;" } }, [
+      el("span", { text: "Fiber" }),
+      el("span", { attrs: { style: "color:var(--muted);font-weight:600;" }, html: right }),
+    ]),
+    ...(pct != null
+      ? [el("div", { attrs: { style: "height:8px;border-radius:999px;background:var(--card2);overflow:hidden;" } }, [
+          el("div", { attrs: { style: `height:100%;width:${pct}%;border-radius:999px;background:${hit ? "var(--good)" : "var(--accent)"};transition:width .5s ease;` } }),
+        ])]
+      : [el("div", { class: "muted", attrs: { style: "font-size:11px;" }, text: "Log fiber to track it against target." })]),
+  ]);
+}
+
 function macroCard(d: DashboardData): HTMLElement | null {
   if (!d.macros) return null;
   const m = d.macros;
@@ -107,7 +126,8 @@ function macroCard(d: DashboardData): HTMLElement | null {
     macroRangeRow("Protein", m.protein, target, "var(--accent)"),
     macroRangeRow("Carbs", m.carbs, target, "var(--gold)"),
     macroRangeRow("Fat", m.fat, target, "var(--bad)"),
-    el("p", { class: "muted", attrs: { style: "margin:2px 0 0;" }, text: `Ranges, not hard limits — anywhere in the band works. Protein ${m.proteinPerKg.low}–${m.proteinPerKg.high} g/kg for your activity level.` }),
+    fiberRow(d.fiber?.target ?? null, d.fiber?.average7d ?? null),
+    el("p", { class: "muted", attrs: { style: "margin:12px 0 0;" }, text: `Ranges, not hard limits — anywhere in the band works. Protein ${m.proteinPerKg.low}–${m.proteinPerKg.high} g/kg for your activity level; fiber 14 g per 1000 kcal.` }),
   ]);
 }
 
@@ -119,6 +139,7 @@ function aboutCard(): HTMLElement {
       el("li", { html: "<b>Protein</b> is scaled to your body weight and activity. The RDA (0.8 g/kg) only prevents deficiency; active adults do well around 1.2–1.6 g/kg, and the 1.6–2.2 g/kg top end mainly helps resistance training or dieting (to preserve muscle) — you don't need the high end otherwise." }),
       el("li", { html: "<b>Fat</b> is 20–35% of calories, with a ~0.5 g/kg floor for essential fatty acids and hormonal health." }),
       el("li", { html: "<b>Carbs</b> fill the remaining calories — there's no strict requirement, so the band is whatever's left." }),
+      el("li", { html: "<b>Fiber</b> targets 14 g per 1000 kcal (IOM). It aids weight management through satiety, slower digestion, a gentler blood-sugar response, and gut-microbiome benefits." }),
     ]),
     el("p", { class: "src", html: "Sources: ISSN Position Stand on Protein &amp; Exercise (2017); Institute of Medicine Acceptable Macronutrient Distribution Ranges; WHO total-fat guidance. Educational only — not medical advice." }),
   ]);
