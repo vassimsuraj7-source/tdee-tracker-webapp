@@ -12,11 +12,13 @@ export interface PlateauResult {
  * masquerade as a stall; average intake is taken over the last 14 days.
  */
 export async function getPlateauAssessment(client: SupabaseClient, today: string): Promise<PlateauResult> {
-  const [weights, calories, goal] = await Promise.all([
+  const [weights, calories, goal, phaseRes] = await Promise.all([
     loadWeights(client),
     loadCalories(client),
     loadWeightMainGoal(client),
+    client.from("diet_phases").select("phase_type").is("end_date", null).limit(1),
   ]);
+  const currentPhase = (phaseRes.data?.[0]?.phase_type as string | undefined) ?? undefined;
 
   let weeklyRateKg: number | null = null;
   let windowDays: number | null = null;
@@ -58,6 +60,7 @@ export async function getPlateauAssessment(client: SupabaseClient, today: string
     avgIntakeKcal,
     measuredTdee: ct?.tdee_used ?? null,
     tdeeSource: ct?.tdee_source ?? null,
+    ...(currentPhase ? { phase: currentPhase } : {}),
   });
 
   return { assessment };

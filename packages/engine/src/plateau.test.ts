@@ -26,6 +26,11 @@ describe("assessPlateau", () => {
     expect(assessPlateau({ ...baseline, weeklyRateKg: -0.4 }).status).toBe("progressing");
   });
 
+  it("never flags a plateau during maintain or recomp (flat trend is the intent)", () => {
+    expect(assessPlateau({ ...baseline, weeklyRateKg: 0, phase: "maintain" }).status).toBe("none");
+    expect(assessPlateau({ ...baseline, weeklyRateKg: 0.02, phase: "recomp" }).status).toBe("none");
+  });
+
   it("flags a plateau when the trend is flat, using measured TDEE as maintenance", () => {
     const a = assessPlateau({ ...baseline, weeklyRateKg: 0.03, measuredTdee: 2500, tdeeSource: "data-driven" });
     expect(a.status).toBe("plateau");

@@ -28,6 +28,8 @@ export interface PlateauInput {
   readonly avgIntakeKcal: number | null;
   readonly measuredTdee: number | null;
   readonly tdeeSource: string | null;
+  /** Active diet phase. A flat trend during maintain/recomp is the intent, not a plateau. */
+  readonly phase?: string;
 }
 
 export interface PlateauAssessment {
@@ -45,6 +47,10 @@ export const PLATEAU_MIN_WINDOW_DAYS = 14;
 
 export function assessPlateau(i: PlateauInput): PlateauAssessment {
   const base = { maintenanceKcal: null, weeklyRateKg: i.weeklyRateKg, windowDays: i.windowDays } as const;
+
+  // A flat weight trend is the *goal* during maintenance and (largely) recomposition,
+  // so it must never be reported as a plateau there.
+  if (i.phase === "maintain" || i.phase === "recomp") return { ...base, status: "none" };
 
   if (!i.hasWeightGoal || i.goalReached) return { ...base, status: "none" };
   if (i.weeklyRateKg == null || i.windowDays == null || i.windowDays < PLATEAU_MIN_WINDOW_DAYS) {
