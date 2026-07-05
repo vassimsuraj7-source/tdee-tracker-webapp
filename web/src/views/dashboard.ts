@@ -96,18 +96,29 @@ function heroCard(root: HTMLElement, d: DashboardData): HTMLElement {
 
 interface MacroRange { lowG: number; highG: number; lowKcal: number; highKcal: number }
 
-function macroRangeRow(name: string, range: MacroRange, target: number, color: string): HTMLElement {
+function macroRangeRow(name: string, range: MacroRange, target: number, color: string, avg: number | null, kcalPerG: number): HTMLElement {
   const lowPct = target > 0 ? Math.round((range.lowKcal / target) * 100) : 0;
   const highPct = target > 0 ? Math.round((range.highKcal / target) * 100) : 0;
   const width = Math.max(3, highPct - lowPct);
+
+  // Actual 7-day average, positioned by its % of the calorie target.
+  const avgPct = avg != null && target > 0 ? Math.min(100, Math.max(0, ((avg * kcalPerG) / target) * 100)) : null;
+  const inBand = avg != null && avg >= range.lowG && avg <= range.highG;
+  const avgColor = inBand ? "var(--good)" : "var(--gold)";
+
+  const bar = el("div", { attrs: { style: "position:relative;height:9px;border-radius:999px;background:var(--card2);overflow:hidden;" } }, [
+    el("div", { attrs: { style: `position:absolute;top:0;bottom:0;left:${lowPct}%;width:${width}%;background:${color};border-radius:999px;` } }),
+    ...(avgPct != null
+      ? [el("div", { attrs: { style: `position:absolute;top:0;bottom:0;left:${avgPct}%;width:3px;transform:translateX(-1.5px);background:var(--text);box-shadow:0 0 0 1px var(--card);border-radius:2px;` } })]
+      : []),
+  ]);
+
   return el("div", { attrs: { style: "margin-bottom:14px;" } }, [
     el("div", { attrs: { style: "display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px;" } }, [
       el("span", { text: name }),
-      el("span", { attrs: { style: "color:var(--muted);font-weight:600;" }, html: `<b style="color:var(--text);">${range.lowG}–${range.highG} g</b> · ${lowPct}–${highPct}%` }),
+      el("span", { attrs: { style: "color:var(--muted);font-weight:600;" }, html: `<b style="color:var(--text);">${range.lowG}–${range.highG} g</b>${avg != null ? ` · avg <b style="color:${avgColor};">${avg} g</b>` : ` · ${lowPct}–${highPct}%`}` }),
     ]),
-    el("div", { attrs: { style: "position:relative;height:8px;border-radius:999px;background:var(--card2);overflow:hidden;" } }, [
-      el("div", { attrs: { style: `position:absolute;top:0;bottom:0;left:${lowPct}%;width:${width}%;background:${color};border-radius:999px;` } }),
-    ]),
+    bar,
   ]);
 }
 
@@ -136,11 +147,11 @@ function macroCard(d: DashboardData): HTMLElement | null {
   const target = d.calorieTarget.value ?? 0;
   return el("div", { class: "card" }, [
     el("h2", { text: "Macro targets" }),
-    macroRangeRow("Protein", m.protein, target, "var(--accent)"),
-    macroRangeRow("Carbs", m.carbs, target, "var(--gold)"),
-    macroRangeRow("Fat", m.fat, target, "var(--bad)"),
+    macroRangeRow("Protein", m.protein, target, "var(--accent)", d.macroAvg?.protein ?? null, 4),
+    macroRangeRow("Carbs", m.carbs, target, "var(--gold)", d.macroAvg?.carbs ?? null, 4),
+    macroRangeRow("Fat", m.fat, target, "var(--bad)", d.macroAvg?.fat ?? null, 9),
     fiberRow(d.fiber?.target ?? null, d.fiber?.average7d ?? null),
-    el("p", { class: "muted", attrs: { style: "margin:12px 0 0;" }, text: `Ranges, not hard limits — anywhere in the band works. Protein ${m.proteinPerKg.low}–${m.proteinPerKg.high} g/kg for your activity level; fiber 14 g per 1000 kcal.` }),
+    el("p", { class: "muted", attrs: { style: "margin:12px 0 0;" }, html: `Coloured band = target range; the <b style="color:var(--text);">▏</b>marker is your 7-day average intake. Protein ${m.proteinPerKg.low}–${m.proteinPerKg.high} g/kg for your activity level; fiber 14 g per 1000 kcal.` }),
   ]);
 }
 

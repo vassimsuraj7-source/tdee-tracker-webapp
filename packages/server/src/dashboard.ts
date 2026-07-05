@@ -23,6 +23,8 @@ export interface DashboardData {
   };
   /** Derived protein/fat/carb gram targets for the calorie target; null if not computable. */
   macros: MacroTargets | null;
+  /** 7-day average logged grams per macro (for the target-vs-actual overlay). */
+  macroAvg: { protein: number | null; carbs: number | null; fat: number | null };
   /** Daily fiber target (14 g/1000 kcal) and recent average intake. */
   fiber: { target: number | null; average7d: number | null };
   /** Current diet phase type ("cut"/"maintain"/"bulk"), or null if none active. */
@@ -132,19 +134,25 @@ export async function getDashboard(client: SupabaseClient, today: string): Promi
     }) ?? null;
   }
 
-  // Fiber: target (14 g/1000 kcal) + 7-day average of logged fiber.
+  // Fiber target + 7-day averages of logged protein / carbs / fat / fiber (for the
+  // macro-card overlay: target band vs. how you've actually been eating).
   const fiberTarget = target != null ? fiberTargetG(target) : null;
-  const fiberStart = addDays(today, -6);
-  const { data: fibData, error: fibErr } = await client
+  const macroStart = addDays(today, -6);
+  const { data: macroData, error: macroErr } = await client
     .from("calorie_entries")
-    .select("fiber_g")
-    .gte("entry_date", fiberStart)
+    .select("protein_g, carbs_g, fat_g, fiber_g")
+    .gte("entry_date", macroStart)
     .lte("entry_date", today);
-  if (fibErr) throw new Error(fibErr.message);
-  const fiberVals = ((fibData ?? []) as { fiber_g: number | null }[])
-    .map((r) => r.fiber_g)
-    .filter((v): v is number => v != null && v > 0);
-  const fiberAvg7d = fiberVals.length ? Math.round(fiberVals.reduce((s, v) => s + v, 0) / fiberVals.length) : null;
+  if (macroErr) throw new Error(macroErr.message);
+  const macroRows = (macroData ?? []) as { protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null }[];
+  const avgOf = (vals: (number | null)[]): number | null => {
+    const nums = vals.filter((v): v is number => v != null && v > 0);
+    return nums.length ? Math.round(nums.reduce((s, v) => s + v, 0) / nums.length) : null;
+  };
+  const proteinAvg7d = avgOf(macroRows.map((r) => r.protein_g));
+  const carbsAvg7d = avgOf(macroRows.map((r) => r.carbs_g));
+  const fatAvg7d = avgOf(macroRows.map((r) => r.fat_g));
+  const fiberAvg7d = avgOf(macroRows.map((r) => r.fiber_g));
 
   return {
     weight: { latest: weightLatest, average7d: weightAvg },
@@ -159,6 +167,7 @@ export async function getDashboard(client: SupabaseClient, today: string): Promi
       warning: ct?.warning ?? null,
     },
     macros,
+    macroAvg: { protein: proteinAvg7d, carbs: carbsAvg7d, fat: fatAvg7d },
     fiber: { target: fiberTarget, average7d: fiberAvg7d },
     phase,
     syncTimestamp,
