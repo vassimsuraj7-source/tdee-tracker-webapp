@@ -199,6 +199,16 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .ok { color: var(--good); font-size: 13px; font-weight: 700; margin-top: 8px; }
 .center { min-height: 78vh; display: flex; flex-direction: column; justify-content: center; }
 
+/* ---------- Add-entry collapsible panel (detail pages) ---------- */
+.adder { border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.adder-toggle {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  background: none; border: none; cursor: pointer; padding: 2px 0;
+  font-weight: 800; font-size: 15px; color: var(--accent);
+}
+.adder-toggle .arrow { color: var(--muted); transition: transform .2s ease; }
+.adder-toggle.open .arrow { transform: rotate(180deg); }
+
 /* ---------- Charts ---------- */
 .chart-box { position: relative; height: 264px; margin-top: 4px; }
 

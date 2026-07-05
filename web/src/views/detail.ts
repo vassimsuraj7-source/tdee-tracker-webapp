@@ -400,40 +400,57 @@ function renderList(
   range: TimeRange,
 ): void {
   const cfg = CFG[metric];
+  const reload = () => void loadChartAndList(metric, range, canvas, listBox);
+
   const items = [...rows].reverse().map((r) => {
     const display = fmt(r.value * cfg.scale, cfg.decimals, cfg.unit ? " " + cfg.unit : "");
-    const edit = el("button", { class: "btn secondary small", text: "Edit" });
-    edit.addEventListener("click", async () => {
-      const entered = prompt(`New ${cfg.title} for ${r.date} (${cfg.unit || "value"}):`, String(r.value * cfg.scale));
-      if (entered == null) return;
-      const n = Number(entered);
-      if (!Number.isFinite(n) || n < 0) return alert("Invalid value.");
-      await saveEntry(client(), metric as Metric, { date: r.date, value: n / cfg.scale });
-      await loadChartAndList(metric, range, canvas, listBox);
-    });
-    const del = el("button", { class: "btn danger small", text: "Delete" });
-    del.addEventListener("click", async () => {
-      if (!confirm(`Delete ${cfg.title} entry for ${r.date}?`)) return;
-      await deleteEntry(client(), metric as Metric, r.date);
-      await loadChartAndList(metric, range, canvas, listBox);
-    });
-    return el("div", { class: "list-item" }, [
-      el("span", { text: `${r.date}  ·  ${display}` }),
-      el("span", {}, [edit, el("span", { text: " " }), del]),
-    ]);
+    const row = el("div", { class: "list-item" });
+
+    const showView = (): void => {
+      const edit = el("button", { class: "btn secondary small", text: "Edit" });
+      const del = el("button", { class: "btn danger small", text: "Delete" });
+      edit.addEventListener("click", showEdit);
+      del.addEventListener("click", async () => {
+        if (!confirm(`Delete ${cfg.title} entry for ${r.date}?`)) return;
+        await deleteEntry(client(), metric as Metric, r.date);
+        reload();
+      });
+      row.replaceChildren(el("span", { class: "k", text: `${r.date}  ·  ${display}` }), el("span", { class: "btn-row" }, [edit, del]));
+    };
+
+    const showEdit = (): void => {
+      const input = el("input", { attrs: { type: "number", step: "0.1", value: String(r.value * cfg.scale), style: "width:88px;padding:7px 9px;" } }) as HTMLInputElement;
+      const save = el("button", { class: "btn small", text: "Save" });
+      const cancel = el("button", { class: "btn secondary small", text: "Cancel" });
+      cancel.addEventListener("click", showView);
+      save.addEventListener("click", async () => {
+        const n = Number(input.value);
+        if (!Number.isFinite(n) || n < 0) return input.focus();
+        await saveEntry(client(), metric as Metric, { date: r.date, value: n / cfg.scale });
+        reload();
+      });
+      row.replaceChildren(el("span", { class: "k", text: r.date }), el("span", { class: "btn-row" }, [input, save, cancel]));
+      input.focus();
+      input.select();
+    };
+
+    showView();
+    return row;
   });
+
   listBox.replaceChildren(
     el("h2", { text: "History" }),
     ...(items.length ? items : [el("p", { class: "muted", text: "No entries in this range." })]),
   );
 }
 
-function addForm(metric: DetailMetric, onSaved: () => void): HTMLElement {
+/** A discoverable, collapsible "add / update entry" panel placed at the top. */
+function createAdder(metric: DetailMetric, onSaved: () => void): HTMLElement {
   const cfg = CFG[metric];
   const date = el("input", { attrs: { type: "date", value: localIsoToday() } }) as HTMLInputElement;
   const value = el("input", { attrs: { type: "number", step: "0.1", placeholder: cfg.unit || "value" } }) as HTMLInputElement;
   const msg = el("p", { class: "err" });
-  const btn = el("button", { class: "btn small", text: "Add / update entry" });
+  const btn = el("button", { class: "btn small", text: "Save entry" });
 
   // Optional macros for calories.
   const macroInputs: Record<string, HTMLInputElement> = {};
@@ -445,6 +462,23 @@ function addForm(metric: DetailMetric, onSaved: () => void): HTMLElement {
       macroFields.push(el("label", { text: `${m} (g)` }, [inp]));
     }
   }
+
+  const body = el("div", { attrs: { style: "display:none;margin-top:14px;" } }, [
+    el("div", { class: "row2" }, [el("label", { text: "Date" }, [date]), el("label", { text: cfg.title + (cfg.unit ? ` (${cfg.unit})` : "") }, [value])]),
+    ...macroFields,
+    btn,
+    msg,
+    el("p", { class: "muted", attrs: { style: "font-size:11px;margin:8px 0 0;" }, text: "Changes are reflected after the next recompute (or “Recompute now” on the dashboard)." }),
+  ]);
+
+  const toggle = el("button", { class: "adder-toggle", html: `<span>＋ Add or update a ${cfg.title.toLowerCase()} entry</span><span class="arrow">▾</span>` });
+  let open = false;
+  const setOpen = (o: boolean): void => {
+    open = o;
+    body.style.display = o ? "block" : "none";
+    toggle.classList.toggle("open", o);
+  };
+  toggle.addEventListener("click", () => setOpen(!open));
 
   btn.addEventListener("click", async () => {
     msg.textContent = "";
@@ -467,20 +501,15 @@ function addForm(metric: DetailMetric, onSaved: () => void): HTMLElement {
       }
       await saveEntry(client(), metric as Metric, entry as never);
       value.value = "";
+      for (const k of Object.keys(macroInputs)) macroInputs[k]!.value = "";
+      setOpen(false);
       onSaved();
     } catch (e) {
       msg.textContent = e instanceof Error ? e.message : "Failed to save.";
     }
   });
 
-  return el("div", { class: "card" }, [
-    el("h2", { text: "Add / edit an entry" }),
-    el("div", { class: "row2" }, [el("label", { text: "Date" }, [date]), el("label", { text: cfg.title + (cfg.unit ? ` (${cfg.unit})` : "") }, [value])]),
-    ...macroFields,
-    btn,
-    msg,
-    el("p", { class: "muted", text: "Weight/calorie changes are picked up on the next recompute (use \u201CRecompute now\u201D on the dashboard)." }),
-  ]);
+  return el("div", { class: "card adder" }, [toggle, body]);
 }
 
 export function renderMetricDetail(root: HTMLElement, metric: DetailMetric, onBack: () => void): void {
@@ -512,8 +541,11 @@ export function renderMetricDetail(root: HTMLElement, metric: DetailMetric, onBa
     segmented.append(b);
   }
 
+  const editable = metric !== "tdee" && metric !== "balance" && metric !== "formulas";
+
   const children: (Node | string)[] = [
     el("div", { class: "metric", attrs: { style: "margin-bottom:14px;" } }, [el("h2", { attrs: { style: "margin:0;font-size:19px;color:var(--text);text-transform:none;letter-spacing:-.4px;" }, text: cfg.title }), back]),
+    ...(editable ? [createAdder(metric, () => void reload())] : []),
     el("div", { class: "card" }, [
       ...(metric === "tdee" || metric === "formulas" ? [] : [segmented]),
       chartBox,
@@ -523,7 +555,6 @@ export function renderMetricDetail(root: HTMLElement, metric: DetailMetric, onBa
     ]),
     listBox,
   ];
-  if (metric !== "tdee" && metric !== "balance" && metric !== "formulas") children.push(addForm(metric, () => void reload()));
 
   root.replaceChildren(el("div", { class: "readable" }, children));
   void reload();
