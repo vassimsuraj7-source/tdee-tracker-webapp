@@ -57,11 +57,47 @@ function drawChart(canvas: HTMLCanvasElement, config: ChartConfiguration): void 
   }
 }
 
+/** Friendly date: "Jul 5" (current year) or "Jul 5, 2026". */
+function fmtShortDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(undefined, sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+}
+
+function miniStat(label: string, valueHtml: string): HTMLElement {
+  return el("div", {}, [
+    el("div", { attrs: { style: "font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);margin-bottom:2px;" }, text: label }),
+    el("div", { attrs: { style: "font-size:18px;font-weight:800;letter-spacing:-.3px;" }, html: valueHtml }),
+  ]);
+}
+
+/** A compact Latest / Change / Avg summary row above the chart. */
+function renderSummary(summaryBox: HTMLElement, metric: DetailMetric, rows: { date: string; value: number }[]): void {
+  const cfg = CFG[metric];
+  if (rows.length === 0) {
+    summaryBox.replaceChildren();
+    return;
+  }
+  const unit = cfg.unit ? " " + cfg.unit : "";
+  const latest = rows[rows.length - 1]!.value * cfg.scale;
+  const avg = (rows.reduce((s, r) => s + r.value, 0) / rows.length) * cfg.scale;
+  const stats: HTMLElement[] = [miniStat("Latest", fmt(latest, cfg.decimals, unit))];
+  if (cfg.kind === "trend") {
+    const change = (rows[rows.length - 1]!.value - rows[0]!.value) * cfg.scale;
+    const sign = change > 0 ? "+" : change < 0 ? "−" : "";
+    stats.push(miniStat("Change (range)", `${sign}${fmt(Math.abs(change), cfg.decimals, unit)}`));
+  }
+  stats.push(miniStat("Avg (range)", fmt(avg, cfg.decimals, unit)));
+  summaryBox.replaceChildren(el("div", { attrs: { style: "display:flex;gap:22px;flex-wrap:wrap;margin-bottom:14px;" } }, stats));
+}
+
 async function loadChartAndList(
   metric: DetailMetric,
   range: TimeRange,
   canvas: HTMLCanvasElement,
   listBox: HTMLElement,
+  summaryBox: HTMLElement,
 ): Promise<void> {
   const cfg = CFG[metric];
   const today = localIsoToday();
@@ -389,7 +425,8 @@ async function loadChartAndList(
     });
   }
 
-  renderList(metric, rows, listBox, canvas, range);
+  renderSummary(summaryBox, metric, rows);
+  renderList(metric, rows, listBox, canvas, range, summaryBox);
 }
 
 function renderList(
@@ -398,9 +435,10 @@ function renderList(
   listBox: HTMLElement,
   canvas: HTMLCanvasElement,
   range: TimeRange,
+  summaryBox: HTMLElement,
 ): void {
   const cfg = CFG[metric];
-  const reload = () => void loadChartAndList(metric, range, canvas, listBox);
+  const reload = () => void loadChartAndList(metric, range, canvas, listBox, summaryBox);
 
   const items = [...rows].reverse().map((r) => {
     const display = fmt(r.value * cfg.scale, cfg.decimals, cfg.unit ? " " + cfg.unit : "");
@@ -415,7 +453,7 @@ function renderList(
         await deleteEntry(client(), metric as Metric, r.date);
         reload();
       });
-      row.replaceChildren(el("span", { class: "k", text: `${r.date}  ·  ${display}` }), el("span", { class: "btn-row" }, [edit, del]));
+      row.replaceChildren(el("span", { class: "k", text: `${fmtShortDate(r.date)}  ·  ${display}` }), el("span", { class: "btn-row" }, [edit, del]));
     };
 
     const showEdit = (): void => {
@@ -429,7 +467,7 @@ function renderList(
         await saveEntry(client(), metric as Metric, { date: r.date, value: n / cfg.scale });
         reload();
       });
-      row.replaceChildren(el("span", { class: "k", text: r.date }), el("span", { class: "btn-row" }, [input, save, cancel]));
+      row.replaceChildren(el("span", { class: "k", text: fmtShortDate(r.date) }), el("span", { class: "btn-row" }, [input, save, cancel]));
       input.focus();
       input.select();
     };
@@ -438,9 +476,14 @@ function renderList(
     return row;
   });
 
+  const heading = el("h2", { text: items.length ? `History (${items.length})` : "History" });
+  const listWrap =
+    items.length > 12
+      ? el("div", { attrs: { style: "max-height:430px;overflow-y:auto;margin:0 -2px;padding:0 2px;" } }, items)
+      : el("div", {}, items);
   listBox.replaceChildren(
-    el("h2", { text: "History" }),
-    ...(items.length ? items : [el("p", { class: "muted", text: "No entries in this range." })]),
+    heading,
+    ...(items.length ? [listWrap] : [el("p", { class: "muted", text: "No entries in this range." })]),
   );
 }
 
@@ -521,10 +564,11 @@ export function renderMetricDetail(root: HTMLElement, metric: DetailMetric, onBa
 
   const canvas = el("canvas") as HTMLCanvasElement;
   const chartBox = el("div", { class: "chart-box" }, [canvas]);
+  const summaryBox = el("div", {});
   const listBox = el("div", {});
 
   async function reload(): Promise<void> {
-    await loadChartAndList(metric, range, canvas, listBox);
+    await loadChartAndList(metric, range, canvas, listBox, summaryBox);
   }
 
   const segmented = el("div", { class: "segmented" });
@@ -547,6 +591,7 @@ export function renderMetricDetail(root: HTMLElement, metric: DetailMetric, onBa
     el("div", { class: "metric", attrs: { style: "margin-bottom:14px;" } }, [el("h2", { attrs: { style: "margin:0;font-size:19px;color:var(--text);text-transform:none;letter-spacing:-.4px;" }, text: cfg.title }), back]),
     ...(editable ? [createAdder(metric, () => void reload())] : []),
     el("div", { class: "card" }, [
+      summaryBox,
       ...(metric === "tdee" || metric === "formulas" ? [] : [segmented]),
       chartBox,
       ...(metric === "formulas"
