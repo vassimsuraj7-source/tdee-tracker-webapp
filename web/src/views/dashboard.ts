@@ -7,6 +7,14 @@ const LAST_KEY = "tdee:last-dashboard";
 
 type DetailMetric = "weight" | "bodyfat" | "steps" | "calories" | "tdee";
 
+const ICONS: Record<DetailMetric, string> = {
+  tdee: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13H11l-1 9 8.5-11H12z"/></svg>',
+  weight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20a8 8 0 0 1 16 0z"/><path d="M12 8l2-3"/><circle cx="12" cy="8" r="1.3" fill="currentColor"/></svg>',
+  bodyfat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>',
+  steps: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4c1.5 0 2.5 1.5 2.5 4S9 16 6.5 16 5 12.5 5 10 5.5 4 7 4z"/><path d="M6 16c2 0 2 4 0 4s-3-1-3-2 1-2 3-2z"/><path d="M17 8c-1.5 0-2.5 1.5-2.5 4s.5 4 3 4 1.5-3.5 1.5-6-.5-6-2-6z"/><path d="M18 16c-2 0-2 4 0 4s3-1 3-2-1-2-3-2z"/></svg>',
+  calories: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3-1 4-1 6a3 3 0 0 0 6 0c0-1 0-2-.5-3 2 1.5 3.5 4 3.5 7a7 7 0 0 1-14 0c0-4 3-6 3-9 1 .5 1.5 1.2 2 2z"/></svg>',
+};
+
 function sourcePill(source: string | null): HTMLElement {
   if (source === "data-driven") return el("span", { class: "pill data", text: "data-driven" });
   if (source === "estimated") return el("span", { class: "pill est", text: "estimated" });
@@ -24,13 +32,44 @@ function metricCard(
   value: string,
   sub?: string,
 ): HTMLElement {
-  const card = el("div", { class: "card", attrs: { style: "cursor:pointer;" } }, [
+  const card = el("div", { class: "card tap" }, [
     el("div", { class: "metric" }, [
-      el("div", {}, [el("div", { class: "value", text: value }), ...(sub ? [el("div", { class: "sub", text: sub })] : [])]),
-      el("div", {}, [el("div", { class: "label", text: label }), el("span", { class: "muted", text: "view ›" })]),
+      el("div", { class: "lead" }, [
+        el("div", { class: "mi", html: ICONS[metric] }),
+        el("div", {}, [el("div", { class: "value", text: value }), ...(sub ? [el("div", { class: "sub", text: sub })] : [])]),
+      ]),
+      el("div", {}, [el("div", { class: "label", text: label }), el("span", { class: "chev", text: "View ›" })]),
     ]),
   ]);
   card.addEventListener("click", () => open(root, metric));
+  return card;
+}
+
+function heroCard(root: HTMLElement, d: DashboardData): HTMLElement {
+  const t = d.calorieTarget.value;
+  const tdee = d.tdee.value;
+  const rows: HTMLElement[] = [sourcePill(d.tdee.source)];
+
+  // Deficit / surplus vs maintenance (TDEE).
+  if (t != null && tdee != null) {
+    const diff = Math.round(t - tdee);
+    if (diff === 0) rows.push(el("span", { class: "delta", text: "maintenance" }));
+    else rows.push(el("span", { class: "delta", text: `${diff < 0 ? "−" : "+"}${Math.abs(diff)} vs TDEE` }));
+  }
+  if (d.calorieTarget.dateUnachievable) rows.push(el("span", { class: "pill warn", text: "date not achievable safely" }));
+  if (d.calorieTarget.warning) rows.push(el("span", { class: "pill warn", text: d.calorieTarget.warning }));
+
+  const big = t != null
+    ? el("div", { class: "big", html: `${Math.round(t)}<small> kcal</small>` })
+    : el("div", { class: "big", text: "—" });
+
+  const card = el("div", { class: "card hero tap" }, [
+    el("div", { class: "eyebrow", text: "Eat today" }),
+    big,
+    el("div", { class: "sub", attrs: { style: "opacity:.85;color:#fff;margin-top:0;" }, text: tdee != null ? `TDEE ${fmtInt(tdee)} kcal` : "TDEE undetermined" }),
+    el("div", { class: "row" }, rows),
+  ]);
+  card.addEventListener("click", () => open(root, "tdee"));
   return card;
 }
 
@@ -42,18 +81,6 @@ function render(root: HTMLElement, d: DashboardData, stale: boolean): void {
   if (!stale && !syncedToday) {
     banners.push(el("div", { class: "banner info", text: "Today's data may be incomplete — not all of today has synced yet." }));
   }
-
-  // Calorie target hero (opens TDEE detail).
-  const targetSub: HTMLElement[] = [el("div", { class: "sub", text: `from TDEE ${fmtInt(d.tdee.value)} kcal` })];
-  if (d.calorieTarget.dateUnachievable) targetSub.push(el("div", { class: "sub" }, [el("span", { class: "pill warn", text: "goal date not achievable at a healthy pace" })]));
-  if (d.calorieTarget.warning) targetSub.push(el("div", { class: "sub" }, [el("span", { class: "pill warn", text: d.calorieTarget.warning })]));
-  const targetCard = el("div", { class: "card", attrs: { style: "cursor:pointer;" } }, [
-    el("div", { class: "metric" }, [
-      el("div", {}, [el("div", { class: "value", text: fmtInt(d.calorieTarget.value, " kcal") }), ...targetSub]),
-      el("div", {}, [el("div", { class: "label", text: "Eat today" }), sourcePill(d.tdee.source)]),
-    ]),
-  ]);
-  targetCard.addEventListener("click", () => open(root, "tdee"));
 
   const bf = d.bodyfat.average7d != null ? d.bodyfat.average7d * 100 : null;
   const bfLatest = d.bodyfat.latest ? `latest ${fmt(d.bodyfat.latest.value * 100)}%` : undefined;
@@ -74,15 +101,15 @@ function render(root: HTMLElement, d: DashboardData, stale: boolean): void {
 
   root.replaceChildren(
     ...banners,
-    targetCard,
+    heroCard(root, d),
     metricCard(root, "tdee", "TDEE", fmtInt(d.tdee.value, " kcal")),
-    metricCard(root, "weight", "Weight (7-day avg)", fmt(d.weight.average7d, 1, " kg"), d.weight.latest ? `latest ${fmt(d.weight.latest.value, 1)} kg` : undefined),
-    metricCard(root, "bodyfat", "Body fat (7-day avg)", fmt(bf, 1, "%"), bfLatest),
-    metricCard(root, "steps", "Steps (latest)", fmtInt(d.steps.latest?.value), d.steps.latest?.date),
-    metricCard(root, "calories", "Calories (latest)", fmtInt(d.calories.latest?.value, " kcal"), d.calories.latest?.date),
+    metricCard(root, "weight", "Weight · 7-day avg", fmt(d.weight.average7d, 1, " kg"), d.weight.latest ? `latest ${fmt(d.weight.latest.value, 1)} kg` : undefined),
+    metricCard(root, "bodyfat", "Body fat · 7-day avg", fmt(bf, 1, "%"), bfLatest),
+    metricCard(root, "steps", "Steps · latest", fmtInt(d.steps.latest?.value), d.steps.latest?.date),
+    metricCard(root, "calories", "Calories · latest", fmtInt(d.calories.latest?.value, " kcal"), d.calories.latest?.date),
     el("div", { class: "card" }, [
       el("div", { class: "metric" }, [
-        el("div", {}, [el("div", { class: "label", text: "Last sync" }), el("div", { class: "sub", text: fmtTimestamp(d.syncTimestamp) })]),
+        el("div", {}, [el("div", { class: "label", attrs: { style: "text-align:left;" }, text: "Last sync" }), el("div", { class: "sub", text: fmtTimestamp(d.syncTimestamp) })]),
         recomputeBtn,
       ]),
       el("div", { class: "sub" }, [recomputeMsg]),
@@ -90,8 +117,18 @@ function render(root: HTMLElement, d: DashboardData, stale: boolean): void {
   );
 }
 
+function skeleton(root: HTMLElement): void {
+  const card = (children: Node[]) => el("div", { class: "card" }, children);
+  root.replaceChildren(
+    el("div", { class: "card hero" }, [el("div", { class: "skel big", attrs: { style: "background:rgba(255,255,255,.25);" } })]),
+    card([el("div", { class: "skel line", attrs: { style: "width:70%" } }), el("div", { class: "skel line", attrs: { style: "width:40%" } })]),
+    card([el("div", { class: "skel line", attrs: { style: "width:70%" } }), el("div", { class: "skel line", attrs: { style: "width:40%" } })]),
+    card([el("div", { class: "skel line", attrs: { style: "width:70%" } }), el("div", { class: "skel line", attrs: { style: "width:40%" } })]),
+  );
+}
+
 async function load(root: HTMLElement): Promise<void> {
-  root.replaceChildren(el("div", { class: "card" }, [el("p", { class: "muted", text: "Loading…" })]));
+  skeleton(root);
   try {
     const data = await getDashboard(supabase as never, localIsoToday());
     localStorage.setItem(LAST_KEY, JSON.stringify(data));

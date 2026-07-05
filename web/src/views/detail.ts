@@ -12,8 +12,19 @@ import {
 import { fillMissingWeightData, trendWeight } from "@tdee/engine";
 import { supabase } from "../supabase.js";
 import { el, fmt, fmtInt, localIsoToday } from "../util.js";
+import { applyChartDefaults, themeColors, areaGradient, withAlpha, baseScales } from "../chartTheme.js";
 
 Chart.register(...registerables);
+applyChartDefaults();
+
+/** Scriptable background: a soft vertical gradient filling to the chart baseline. */
+function gradientFill(color: string, topAlpha = 0.26) {
+  return (context: { chart: Chart }): CanvasGradient | string => {
+    const { ctx, chartArea } = context.chart;
+    if (!chartArea) return withAlpha(color, topAlpha);
+    return areaGradient(ctx, chartArea.bottom, chartArea.top, color, topAlpha);
+  };
+}
 
 const client = () => supabase as never;
 
@@ -57,6 +68,8 @@ async function loadChartAndList(
   const cfg = CFG[metric];
   const today = localIsoToday();
 
+  const c = themeColors();
+
   if (metric === "tdee") {
     const history = await getTdeeHistory(client());
     drawChart(canvas, {
@@ -64,10 +77,20 @@ async function loadChartAndList(
       data: {
         labels: history.map((h) => h.windowEnd),
         datasets: [
-          { label: "TDEE (kcal)", data: history.map((h) => Math.round(h.value)), borderColor: "#0e7a5f", backgroundColor: "#0e7a5f", tension: 0.25, pointRadius: 2 },
+          {
+            label: "TDEE (kcal)",
+            data: history.map((h) => Math.round(h.value)),
+            borderColor: c.accent,
+            backgroundColor: gradientFill(c.accent),
+            fill: true,
+            tension: 0.35,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            borderWidth: 2.5,
+          },
         ],
       },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true } } },
+      options: { plugins: { legend: { display: false } }, scales: baseScales(c) as never, interaction: { mode: "index", intersect: false } },
     });
     listBox.replaceChildren(
       el("p", { class: "muted", text: `${history.length} calculated windows.` }),
@@ -92,33 +115,64 @@ async function loadChartAndList(
     });
     const pointColors = rows.map((r, i) => {
       const t = trend[i];
-      if (t == null) return "#5b6472";
-      return r.value * cfg.scale <= t ? "#0f9d58" : "#d64545"; // below trend = green
+      if (t == null) return c.muted;
+      return r.value * cfg.scale <= t ? c.good : c.bad; // below trend = green
     });
 
     const datasets: Record<string, unknown>[] = [
-      { label: `${cfg.title} (${cfg.unit})`, data: raw, borderColor: "#c9d2dc", pointBackgroundColor: pointColors, pointRadius: 3, tension: 0, borderWidth: 1 },
-      { label: "Trend (7-day avg)", data: trend, borderColor: "#0e7a5f", pointRadius: 0, tension: 0.3, borderWidth: 2, spanGaps: true },
+      {
+        label: `${cfg.title} (${cfg.unit})`,
+        data: raw,
+        showLine: false,
+        pointBackgroundColor: pointColors,
+        pointBorderColor: pointColors,
+        pointRadius: 2.5,
+        pointHoverRadius: 5,
+      },
+      {
+        label: "Trend (7-day avg)",
+        data: trend,
+        borderColor: c.accent,
+        backgroundColor: gradientFill(c.accent, 0.18),
+        fill: true,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        tension: 0.35,
+        borderWidth: 2.5,
+        spanGaps: true,
+      },
     ];
 
     if (cfg.goalType) {
       const goal = await getMainGoal(client(), cfg.goalType);
       if (goal) {
         const gv = goal.target_value * cfg.scale;
-        datasets.push({ label: "Goal", data: labels.map(() => gv), borderColor: "#e6bf57", borderDash: [6, 4], pointRadius: 0, borderWidth: 2 });
+        datasets.push({ label: "Goal", data: labels.map(() => gv), borderColor: c.gold, borderDash: [6, 5], pointRadius: 0, borderWidth: 2, fill: false });
       }
     }
 
     drawChart(canvas, {
       type: "line",
       data: { labels, datasets: datasets as never },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true } }, scales: { y: { beginAtZero: false } } },
+      options: { plugins: { legend: { display: true } }, scales: baseScales(c) as never, interaction: { mode: "index", intersect: false } },
     });
   } else if (cfg.kind === "bars") {
     drawChart(canvas, {
       type: "bar",
-      data: { labels, datasets: [{ label: cfg.title, data: rows.map((r) => r.value), backgroundColor: "#0e7a5f" }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+      data: {
+        labels,
+        datasets: [
+          {
+            label: cfg.title,
+            data: rows.map((r) => r.value),
+            backgroundColor: gradientFill(c.accent, 0.95),
+            borderRadius: 6,
+            borderSkipped: false,
+            maxBarThickness: 26,
+          },
+        ],
+      },
+      options: { plugins: { legend: { display: false } }, scales: baseScales(c, true) as never },
     });
   } else if (cfg.kind === "macros") {
     const tdee = await currentTdee();
@@ -131,18 +185,21 @@ async function loadChartAndList(
       return a > 0 && a <= r.value ? a : 0; // positive + within bound (Req 19.2)
     });
     const datasets: Record<string, unknown>[] = [
-      { label: "Protein", data: protein, backgroundColor: "#0e7a5f", stack: "macros" },
-      { label: "Carbs", data: carbs, backgroundColor: "#e6bf57", stack: "macros" },
-      { label: "Fat", data: fat, backgroundColor: "#d64545", stack: "macros" },
-      { label: "Alcohol", data: alcohol, backgroundColor: "#8a63d2", stack: "macros" },
+      { label: "Protein", data: protein, backgroundColor: c.accent, stack: "macros", borderRadius: 4, borderSkipped: false, maxBarThickness: 26 },
+      { label: "Carbs", data: carbs, backgroundColor: c.gold, stack: "macros", borderRadius: 4, borderSkipped: false, maxBarThickness: 26 },
+      { label: "Fat", data: fat, backgroundColor: c.bad, stack: "macros", borderRadius: 4, borderSkipped: false, maxBarThickness: 26 },
+      { label: "Alcohol", data: alcohol, backgroundColor: c.violet, stack: "macros", borderRadius: 4, borderSkipped: false, maxBarThickness: 26 },
     ];
     if (tdee != null) {
-      datasets.push({ type: "line", label: "TDEE", data: labels.map(() => Math.round(tdee)), borderColor: "#161b22", borderDash: [6, 4], pointRadius: 0, borderWidth: 2 });
+      datasets.push({ type: "line", label: "TDEE", data: labels.map(() => Math.round(tdee)), borderColor: c.text, borderDash: [6, 5], pointRadius: 0, borderWidth: 2 });
     }
+    const macroScales = baseScales(c, true);
+    (macroScales.x as Record<string, unknown>).stacked = true;
+    (macroScales.y as Record<string, unknown>).stacked = true;
     drawChart(canvas, {
       type: "bar",
       data: { labels, datasets: datasets as never },
-      options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } },
+      options: { scales: macroScales as never, interaction: { mode: "index", intersect: false } },
     });
   }
 
@@ -247,28 +304,32 @@ export function renderMetricDetail(root: HTMLElement, metric: DetailMetric, onBa
   const back = el("button", { class: "btn secondary small", text: "\u2190 Back" });
   back.addEventListener("click", onBack);
 
-  const rangeSelect = el("select") as HTMLSelectElement;
-  for (const [v, label] of [["7d", "7 days"], ["30d", "30 days"], ["90d", "90 days"], ["all", "All"]] as const) {
-    rangeSelect.append(el("option", { text: label, attrs: { value: v } }));
-  }
-  rangeSelect.value = range;
-
   const canvas = el("canvas") as HTMLCanvasElement;
-  const chartBox = el("div", { attrs: { style: "position:relative;height:280px;" } }, [canvas]);
+  const chartBox = el("div", { class: "chart-box" }, [canvas]);
   const listBox = el("div", {});
 
   async function reload(): Promise<void> {
     await loadChartAndList(metric, range, canvas, listBox);
   }
-  rangeSelect.addEventListener("change", () => {
-    range = rangeSelect.value as TimeRange;
-    void reload();
-  });
+
+  const segmented = el("div", { class: "segmented" });
+  const rangeButtons = new Map<TimeRange, HTMLButtonElement>();
+  for (const [v, label] of [["7d", "7D"], ["30d", "30D"], ["90d", "90D"], ["all", "All"]] as const) {
+    const b = el("button", { text: label }) as HTMLButtonElement;
+    b.classList.toggle("active", v === range);
+    b.addEventListener("click", () => {
+      range = v;
+      for (const [id, btn] of rangeButtons) btn.classList.toggle("active", id === v);
+      void reload();
+    });
+    rangeButtons.set(v, b);
+    segmented.append(b);
+  }
 
   const children: (Node | string)[] = [
-    el("div", { class: "metric" }, [el("h2", { text: cfg.title }), back]),
+    el("div", { class: "metric", attrs: { style: "margin-bottom:14px;" } }, [el("h2", { attrs: { style: "margin:0;font-size:19px;color:var(--text);text-transform:none;letter-spacing:-.4px;" }, text: cfg.title }), back]),
     el("div", { class: "card" }, [
-      ...(metric === "tdee" ? [] : [el("label", { text: "Time range" }, [rangeSelect])]),
+      ...(metric === "tdee" ? [] : [segmented]),
       chartBox,
     ]),
     listBox,
