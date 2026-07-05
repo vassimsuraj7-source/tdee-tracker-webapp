@@ -6,6 +6,7 @@ import {
   getMainGoal,
   getTdeeHistory,
   getFormulaComparison,
+  getPhases,
   type Metric,
   type TimeRange,
   type GoalType,
@@ -13,7 +14,7 @@ import {
 import { fillMissingWeightData, trendWeight } from "@tdee/engine";
 import { supabase } from "../supabase.js";
 import { el, fmt, fmtInt, localIsoToday } from "../util.js";
-import { applyChartDefaults, themeColors, areaGradient, withAlpha, baseScales } from "../chartTheme.js";
+import { applyChartDefaults, themeColors, areaGradient, withAlpha, baseScales, phaseBandsPlugin, type PhaseBand } from "../chartTheme.js";
 
 Chart.register(...registerables);
 applyChartDefaults();
@@ -81,6 +82,13 @@ async function loadChartAndList(
 
   const c = themeColors();
 
+  // Diet-phase background bands for time-series charts (not the formula comparison).
+  let bands: PhaseBand[] = [];
+  if (metric !== "formulas") {
+    const phaseList = await getPhases(client(), today).catch(() => []);
+    bands = phaseList.map((p) => ({ startDate: p.phase.startDate, endDate: p.phase.endDate, phaseType: p.phase.phaseType }));
+  }
+
   if (metric === "tdee") {
     const history = await getTdeeHistory(client());
     drawChart(canvas, {
@@ -102,6 +110,7 @@ async function loadChartAndList(
         ],
       },
       options: { plugins: { legend: { display: false } }, scales: baseScales(c) as never, interaction: { mode: "index", intersect: false } },
+      plugins: [phaseBandsPlugin(bands, today)],
     });
     listBox.replaceChildren(
       el("p", { class: "muted", text: `${history.length} calculated windows.` }),
@@ -163,6 +172,7 @@ async function loadChartAndList(
         ] as never,
       },
       options: { plugins: { legend: { display: true } }, scales: baseScales(c, true) as never, interaction: { mode: "index", intersect: false } },
+      plugins: [phaseBandsPlugin(bands, today)],
     });
 
     const valExp = expenditure.filter((x): x is number => x != null);
@@ -321,6 +331,7 @@ async function loadChartAndList(
       type: "line",
       data: { labels, datasets: datasets as never },
       options: { plugins: { legend: { display: true } }, scales: baseScales(c) as never, interaction: { mode: "index", intersect: false } },
+      plugins: [phaseBandsPlugin(bands, today)],
     });
   } else if (cfg.kind === "bars") {
     drawChart(canvas, {
@@ -339,6 +350,7 @@ async function loadChartAndList(
         ],
       },
       options: { plugins: { legend: { display: false } }, scales: baseScales(c, true) as never },
+      plugins: [phaseBandsPlugin(bands, today)],
     });
   } else if (cfg.kind === "macros") {
     const tdee = await currentTdee();
@@ -366,6 +378,7 @@ async function loadChartAndList(
       type: "bar",
       data: { labels, datasets: datasets as never },
       options: { scales: macroScales as never, interaction: { mode: "index", intersect: false } },
+      plugins: [phaseBandsPlugin(bands, today)],
     });
   }
 
@@ -497,6 +510,9 @@ export function renderMetricDetail(root: HTMLElement, metric: DetailMetric, onBa
     el("div", { class: "card" }, [
       ...(metric === "tdee" || metric === "formulas" ? [] : [segmented]),
       chartBox,
+      ...(metric === "formulas"
+        ? []
+        : [el("p", { class: "muted", attrs: { style: "font-size:11px;margin:8px 0 0;" }, html: "Shaded bands = diet phases · <span style=\"color:var(--accent);font-weight:700;\">cut</span> · <span style=\"color:var(--gold);font-weight:700;\">maintain</span> · <span style=\"color:var(--violet);font-weight:700;\">bulk</span>" })]),
     ]),
     listBox,
   ];

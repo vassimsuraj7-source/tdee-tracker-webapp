@@ -83,7 +83,8 @@ function heroCard(root: HTMLElement, d: DashboardData): HTMLElement {
     ? el("div", { class: "big", html: `${Math.round(t)}<small> kcal</small>` })
     : el("div", { class: "big", text: "—" });
 
-  const card = el("div", { class: "card hero tap" }, [
+  const phaseClass = d.phase === "maintain" ? " phase-maintain" : d.phase === "bulk" ? " phase-bulk" : "";
+  const card = el("div", { class: `card hero tap${phaseClass}` }, [
     el("div", { class: "eyebrow", text: "Eat today" }),
     big,
     el("div", { class: "sub", attrs: { style: "opacity:.85;color:#fff;margin-top:0;" }, text: tdee != null ? `TDEE ${fmtInt(tdee)} kcal` : "TDEE undetermined" }),

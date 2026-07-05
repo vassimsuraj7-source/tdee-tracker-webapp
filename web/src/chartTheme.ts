@@ -1,4 +1,4 @@
-import { Chart } from "chart.js";
+import { Chart, type Plugin } from "chart.js";
 
 /** Read a CSS custom property off :root, with a fallback. */
 function cssVar(name: string, fallback: string): string {
@@ -85,6 +85,61 @@ export function withAlpha(color: string, alpha: number): string {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
   return c;
+}
+
+/** Diet-phase accent color: cut = accent (green), maintain = gold, bulk = violet. */
+export function phaseColor(type: string): string {
+  const c = themeColors();
+  if (type === "cut") return c.accent;
+  if (type === "bulk") return c.violet;
+  return c.gold; // maintain
+}
+
+export interface PhaseBand {
+  startDate: string;
+  endDate: string | null;
+  phaseType: string;
+}
+
+/**
+ * Chart.js plugin that shades the plot background by diet phase. Works on any
+ * category x-axis whose labels are ISO date strings; contiguous dates in the same
+ * phase are drawn as one translucent band behind the data.
+ */
+export function phaseBandsPlugin(bands: PhaseBand[], today: string): Plugin {
+  return {
+    id: "phaseBands",
+    beforeDatasetsDraw(chart) {
+      if (!bands.length) return;
+      const labels = (chart.data.labels ?? []) as string[];
+      const x = chart.scales.x;
+      const area = chart.chartArea;
+      if (!labels.length || !x || !area) return;
+
+      const phaseAt = (d: string): PhaseBand | undefined =>
+        bands.find((b) => d >= b.startDate && d <= (b.endDate ?? today));
+      const px = (k: number): number => x.getPixelForValue(k);
+      const ctx = chart.ctx;
+
+      let i = 0;
+      while (i < labels.length) {
+        const p = phaseAt(labels[i]!);
+        if (!p) {
+          i++;
+          continue;
+        }
+        let j = i;
+        while (j + 1 < labels.length && phaseAt(labels[j + 1]!) === p) j++;
+        const left = i === 0 ? area.left : (px(i - 1) + px(i)) / 2;
+        const right = j === labels.length - 1 ? area.right : (px(j) + px(j + 1)) / 2;
+        ctx.save();
+        ctx.fillStyle = withAlpha(phaseColor(p.phaseType), 0.13);
+        ctx.fillRect(left, area.top, right - left, area.bottom - area.top);
+        ctx.restore();
+        i = j + 1;
+      }
+    },
+  };
 }
 
 /** Standard cartesian scales: hidden x gridlines, soft y gridlines. Kept minimal
