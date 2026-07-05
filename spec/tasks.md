@@ -254,5 +254,11 @@ deployed via the GitHub Pages workflow. Engine test count grew from 55 to 82.
 
 - [x] E13. Export & backup (`server/export.ts`) — one-tap daily CSV (merged metrics) + full JSON backup from Settings, client-side via the authenticated session.
 
-- [x] E14. Diet phases (`server/phases.ts`, migration `20260705093000_diet_phases.sql`) — cut / maintain / bulk periods with start/end dates; per-phase summaries (duration, weight change, weekly rate, avg intake, avg expenditure) computed from existing data; a dedicated Phases tab. Requires running the new migration.
+- [x] E14. Diet phases (`server/phases.ts`, migration `20260705093000_diet_phases.sql`) — cut / maintain / bulk / recomp periods with start/end dates; per-phase summaries (duration, weight change, weekly rate, avg intake, avg expenditure) computed from existing data; a dedicated Phases tab. Starting/ending a phase auto-recomputes.
+  - **Phases drive the calorie target** (`engine/calorieTarget.ts` `phase` input, wired through `server/recompute.ts` and the recompute Edge Function): **maintain** → maintenance (overrides any goal); **recomp** → a gentle deficit (10% of TDEE, capped at 250 kcal, floored at 1200, skipped if underweight) that auto-raises the protein band — grounded in the recomposition literature (~250–500 kcal deficit + 1.6–2.2 g/kg protein + resistance training; best for novices / higher body fat / returning trainees); **cut/bulk** defer to the weight goal. The dashboard hero is tinted per phase and every time-series chart is shaded by phase (green cut · gold maintain · teal recomp · violet bulk).
+  - Migrations: `20260705093000_diet_phases.sql` (table + RLS) and `20260705094000_recomp_phase.sql` (extend the phase-type check).
   - _Deliberately NOT built: user-intuition calorie imputation — it would reintroduce the ~40–50% self-report bias the data-driven TDEE exists to avoid. Missing days are still imputed neutrally within a valid window; the data-quality meter surfaces thin coverage instead._
+
+## Engine test coverage
+
+The pure `@tdee/engine` grew from 55 tests at launch to **86** across these enhancements (macros, fiber, formulas, projection, outliers, plateau, healthy-weight range, phase-aware calorie target incl. recomp). All server layers are additionally verified against the live database.
