@@ -216,3 +216,43 @@ Execution waves (tasks within a wave can run in parallel; each wave depends on t
 - **Testing focus**: unit tests concentrate on the engine (task 3); integration tests on ingestion idempotency and recompute idempotency; security tests on auth rejection, rate limiting, and error hygiene. Correctness Properties 1-8 from the design map to specific tasks (noted inline).
 - **Not in this plan**: progress photos and social features (documented future work), Cronometer CSV import (obsolete), and any native companion app (rejected).
 - **Deploy-time secrets**: the single owner credential and the Ingestion API key are provisioned via Supabase secrets/environment at deploy time (tasks 8 and 14), never committed to source.
+
+## Post-Launch Enhancements
+
+Delivered after the initial 14-task launch, in response to real use. Each was built
+engine-first (pure, unit-tested) → server → PWA, verified against the live DB, and
+deployed via the GitHub Pages workflow. Engine test count grew from 55 to 82.
+
+- [x] E1. Modern UI redesign + dark mode
+  - Design-system rewrite (`web/src/styles.css`): tokens, light/dark via `prefers-color-scheme`, rounded cards, hero "Eat today" card, icon tab bar, segmented time-range control, skeleton loading, animations.
+  - Chart theming (`web/src/chartTheme.ts`): gradient area fills, deviation-colored scatter, rounded bars, soft grids, themed tooltips. Reverted layout-affecting Chart.js option changes after they collapsed the plot area (kept explicit `responsive`/`maintainAspectRatio` per chart).
+  - Network-first service worker so deploys show up without a double reload; `cancel-in-progress: false` on the Pages workflow to stop transient deploy failures.
+
+- [x] E2. Adaptive layout — dashboard reflows to 2 columns ≥820px and 3 columns ≥1300px (hero full-width); standalone views capped at a readable width. Phone stays single-column.
+
+- [x] E3. Macro targets as evidence-based ranges (`engine/macros.ts`)
+  - Protein scaled per kg by activity level (RDA 0.8 floor; ~1.2–1.6 general; 1.6–2.2 only for active/dieting), +0.2 g/kg in a deficit. Fat 20–35% of kcal with a 0.5 g/kg floor. Carbs are the residual band. Shown as ranges with range bars + an expandable, cited methodology.
+  - Sources: ISSN Position Stand on Protein & Exercise (2017); IOM AMDR; WHO fat guidance.
+
+- [x] E4. Fiber target (14 g/1000 kcal, IOM) + 7-day intake tracking on the macro card.
+
+- [x] E5. Weekly insights recap (`server/insights.ts`) — avg intake + week-over-week, adherence %, trend-based weekly rate, days logged, and protein/fiber adherence vs. target.
+
+- [x] E6. Energy-balance overlay chart — daily intake bars vs. expenditure (TDEE) line with a net-balance / implied-rate summary.
+
+- [x] E7. Formula comparison (`engine/formulas.ts`) — measured TDEE vs. Mifflin-St Jeor, Harris-Benedict, Katch-McArdle, Cunningham (lean-mass formulas use body-fat %). Horizontal bar chart + table; highlights that the measured value is the personal ground truth.
+
+- [x] E8. Goal projection (`engine/projection.ts`) — extrapolate the trend to a goal-weight ETA using a stable 28→21→14-day rate baseline; classify ahead / on-track / behind / stalled / wrong-direction / reached.
+
+- [x] E9. Weight-outlier flagging (`engine/outliers.ts`) — robust neighbor-median detection (flag only when ≥4 kg AND ≥6% off, ≥3 neighbours); dashboard banner with a Review jump to fix skewing entries.
+
+- [x] E10. Plateau check (`engine/plateau.ts`) — grounded, myth-debunking. Because TDEE is measured, a flat trend (±0.1 kg/wk over ≥14 days) means the deficit has closed; the card says so plainly and cites the evidence (NEJM 1992 under-reporting; AJCN 2014 adherence model; adaptive-thermogenesis reviews) rather than invoking "starvation mode."
+
+- [x] E11. Data-quality meter (`server/dataQuality.ts`) — calorie/weight coverage over 30 days + a TDEE confidence tier (High/Good/Limited) keyed to valid calorie days in the 12-day window.
+
+- [x] E12. Healthy weight RANGE (`engine/guardrails.healthyWeightRangeKg`) — WHO healthy BMI band (18.5–24.9) rather than a single "ideal" weight; shows current status and, only if out of range, the nearest healthy edge as a target, with a BMI caveat.
+
+- [x] E13. Export & backup (`server/export.ts`) — one-tap daily CSV (merged metrics) + full JSON backup from Settings, client-side via the authenticated session.
+
+- [x] E14. Diet phases (`server/phases.ts`, migration `20260705093000_diet_phases.sql`) — cut / maintain / bulk periods with start/end dates; per-phase summaries (duration, weight change, weekly rate, avg intake, avg expenditure) computed from existing data; a dedicated Phases tab. Requires running the new migration.
+  - _Deliberately NOT built: user-intuition calorie imputation — it would reintroduce the ~40–50% self-report bias the data-driven TDEE exists to avoid. Missing days are still imputed neutrally within a valid window; the data-quality meter surfaces thin coverage instead._
