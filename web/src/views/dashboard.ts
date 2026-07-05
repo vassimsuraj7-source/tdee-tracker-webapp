@@ -2,10 +2,12 @@ import {
   getDashboard,
   getWeeklyInsights,
   getGoalProjection,
+  getWeightOutliers,
   triggerRecompute,
   type DashboardData,
   type WeeklyInsights,
   type GoalProjectionResult,
+  type WeightOutlierResult,
 } from "@tdee/server";
 import { supabase } from "../supabase.js";
 import { el, fmt, fmtInt, fmtTimestamp, localIsoToday } from "../util.js";
@@ -281,13 +283,35 @@ function projectionCard(r: GoalProjectionResult | null): HTMLElement | null {
   ]);
 }
 
-function render(root: HTMLElement, d: DashboardData, insights: WeeklyInsights | null, projection: GoalProjectionResult | null, stale: boolean): void {
+function render(
+  root: HTMLElement,
+  d: DashboardData,
+  insights: WeeklyInsights | null,
+  projection: GoalProjectionResult | null,
+  outliers: WeightOutlierResult | null,
+  stale: boolean,
+): void {
   const today = localIsoToday();
   const banners: HTMLElement[] = [];
   if (stale) banners.push(el("div", { class: "banner warn", text: "Offline — showing the last data loaded. It may be out of date." }));
   const syncedToday = d.syncTimestamp?.slice(0, 10) === today;
   if (!stale && !syncedToday) {
     banners.push(el("div", { class: "banner info", text: "Today's data may be incomplete — not all of today has synced yet." }));
+  }
+
+  // Weight-outlier warning (skews trend + TDEE) — offer a jump to review it.
+  const flagged = outliers?.outliers ?? [];
+  if (flagged.length > 0) {
+    const o = flagged[0]!;
+    const more = flagged.length > 1 ? ` (+${flagged.length - 1} more)` : "";
+    const reviewBtn = el("button", { class: "btn secondary small", text: "Review" });
+    reviewBtn.addEventListener("click", () => open(root, "weight"));
+    banners.push(
+      el("div", { class: "banner warn", attrs: { style: "justify-content:space-between;" } }, [
+        el("span", { attrs: { style: "flex:1;" }, text: `A weight entry looks off: ${o.value} kg on ${o.date} vs a trend of ≈${Math.round(o.expected)} kg${more}. It may skew your charts.` }),
+        reviewBtn,
+      ]),
+    );
   }
 
   const bf = d.bodyfat.average7d != null ? d.bodyfat.average7d * 100 : null;
@@ -373,26 +397,28 @@ interface CachedPayload {
   d: DashboardData;
   insights: WeeklyInsights | null;
   projection: GoalProjectionResult | null;
+  outliers: WeightOutlierResult | null;
 }
 
 async function load(root: HTMLElement): Promise<void> {
   skeleton(root);
   const today = localIsoToday();
   try {
-    const [data, insights, projection] = await Promise.all([
+    const [data, insights, projection, outliers] = await Promise.all([
       getDashboard(supabase as never, today),
       getWeeklyInsights(supabase as never, today).catch(() => null),
       getGoalProjection(supabase as never, today).catch(() => null),
+      getWeightOutliers(supabase as never, today).catch(() => null),
     ]);
-    localStorage.setItem(LAST_KEY, JSON.stringify({ d: data, insights, projection } satisfies CachedPayload));
-    render(root, data, insights, projection, false);
+    localStorage.setItem(LAST_KEY, JSON.stringify({ d: data, insights, projection, outliers } satisfies CachedPayload));
+    render(root, data, insights, projection, outliers, false);
   } catch {
     const cached = localStorage.getItem(LAST_KEY);
     if (cached) {
       const parsed = JSON.parse(cached) as CachedPayload | DashboardData;
       // Support both the new combined shape and any older cache (dashboard-only).
-      if ("d" in parsed) render(root, parsed.d, parsed.insights, parsed.projection ?? null, true);
-      else render(root, parsed, null, null, true);
+      if ("d" in parsed) render(root, parsed.d, parsed.insights, parsed.projection ?? null, parsed.outliers ?? null, true);
+      else render(root, parsed, null, null, null, true);
     } else {
       root.replaceChildren(el("div", { class: "card" }, [el("p", { class: "err", text: "Could not load dashboard and no cached data is available." })]));
     }

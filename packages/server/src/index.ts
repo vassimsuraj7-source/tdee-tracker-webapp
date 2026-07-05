@@ -11,3 +11,4 @@ export * from "./dashboard.js";
 export * from "./insights.js";
 export * from "./formulas.js";
 export * from "./projection.js";
+export * from "./outliers.js";
