@@ -15,7 +15,6 @@ import {
 } from "@tdee/server";
 import { supabase } from "../supabase.js";
 import { el, fmt, fmtInt, fmtTimestamp, localIsoToday } from "../util.js";
-import { renderMetricDetail } from "./detail.js";
 
 const LAST_KEY = "tdee:last-dashboard";
 
@@ -37,8 +36,24 @@ function sourcePill(source: string | null): HTMLElement {
   return el("span", { class: "pill", text: "no data" });
 }
 
-function open(root: HTMLElement, metric: DetailMetric): void {
-  renderMetricDetail(root, metric, () => renderDashboard(root));
+async function open(root: HTMLElement, metric: DetailMetric): Promise<void> {
+  // Chart.js (~half the JS bundle) lives in detail.ts. Load it on demand so the
+  // dashboard's first paint stays lean; the chunk is cached after the first open.
+  root.replaceChildren(
+    el("div", { class: "readable" }, [
+      el("div", { class: "card" }, [el("div", { class: "skel line", attrs: { style: "width:40%" } }), el("div", { class: "chart-box" }, [el("div", { class: "skel", attrs: { style: "width:100%;height:100%;" } })])]),
+    ]),
+  );
+  try {
+    const { renderMetricDetail } = await import("./detail.js");
+    renderMetricDetail(root, metric, () => renderDashboard(root));
+  } catch {
+    root.replaceChildren(
+      el("div", { class: "readable" }, [
+        el("div", { class: "card" }, [el("p", { class: "err", text: "Couldn't load the chart view. Check your connection and try again." })]),
+      ]),
+    );
+  }
 }
 
 function metricCard(
@@ -57,7 +72,7 @@ function metricCard(
       el("div", {}, [el("div", { class: "label", text: label }), el("span", { class: "chev", text: "View ›" })]),
     ]),
   ]);
-  card.addEventListener("click", () => open(root, metric));
+  card.addEventListener("click", () => void open(root, metric));
   return card;
 }
 
@@ -90,7 +105,7 @@ function heroCard(root: HTMLElement, d: DashboardData): HTMLElement {
     el("div", { class: "sub", attrs: { style: "opacity:.85;color:#fff;margin-top:0;" }, text: tdee != null ? `TDEE ${fmtInt(tdee)} kcal` : "TDEE undetermined" }),
     el("div", { class: "row" }, rows),
   ]);
-  card.addEventListener("click", () => open(root, "tdee"));
+  card.addEventListener("click", () => void open(root, "tdee"));
   return card;
 }
 
@@ -435,7 +450,7 @@ function render(
     const o = flagged[0]!;
     const more = flagged.length > 1 ? ` (+${flagged.length - 1} more)` : "";
     const reviewBtn = el("button", { class: "btn secondary small", text: "Review" });
-    reviewBtn.addEventListener("click", () => open(root, "weight"));
+    reviewBtn.addEventListener("click", () => void open(root, "weight"));
     banners.push(
       el("div", { class: "banner warn", attrs: { style: "justify-content:space-between;" } }, [
         el("span", { attrs: { style: "flex:1;" }, text: `A weight entry looks off: ${o.value} kg on ${o.date} vs a trend of ≈${Math.round(o.expected)} kg${more}. It may skew your charts.` }),
@@ -480,7 +495,7 @@ function render(
       el("div", {}, [el("div", { class: "label", text: "Energy balance" }), el("span", { class: "chev", text: "View ›" })]),
     ]),
   ]);
-  balanceCard.addEventListener("click", () => open(root, "balance"));
+  balanceCard.addEventListener("click", () => void open(root, "balance"));
 
   const formulasCard = el("div", { class: "card tap" }, [
     el("div", { class: "metric" }, [
@@ -491,7 +506,7 @@ function render(
       el("div", {}, [el("div", { class: "label", text: "Formulas" }), el("span", { class: "chev", text: "View ›" })]),
     ]),
   ]);
-  formulasCard.addEventListener("click", () => open(root, "formulas"));
+  formulasCard.addEventListener("click", () => void open(root, "formulas"));
 
   const proj = projectionCard(projection, d.phase);
   const plat = plateauCard(plateau);
