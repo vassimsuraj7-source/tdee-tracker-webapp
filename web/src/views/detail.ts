@@ -57,11 +57,6 @@ function drawChart(canvas: HTMLCanvasElement, config: ChartConfiguration): void 
   }
 }
 
-async function currentTdee(): Promise<number | null> {
-  const { data } = await supabase.from("current_target").select("tdee_used").eq("id", 1).limit(1);
-  return (data?.[0]?.tdee_used as number | null) ?? null;
-}
-
 async function loadChartAndList(
   metric: DetailMetric,
   range: TimeRange,
@@ -349,7 +344,23 @@ async function loadChartAndList(
       plugins: [phaseBandsPlugin(bands, today)],
     });
   } else if (cfg.kind === "macros") {
-    const tdee = await currentTdee();
+    // Overlay the historical expenditure (TDEE effective on each day, carried
+    // forward from the rolling-window records) — a changing line, matching the TDEE
+    // and energy-balance views — rather than a flat "current TDEE".
+    const history = await getTdeeHistory(client());
+    const sortedHist = [...history].sort((a, b) => (a.windowEnd < b.windowEnd ? -1 : 1));
+    const expenditureOn = (d: string): number | null => {
+      let v: number | null = null;
+      for (const h of sortedHist) {
+        if (h.windowEnd <= d) v = h.value;
+        else break;
+      }
+      return v;
+    };
+    const tdeeSeries = labels.map((d) => {
+      const e = expenditureOn(d);
+      return e == null ? null : Math.round(e);
+    });
     const protein = rows.map((r) => Math.round((r.macros?.protein ?? 0) * 4));
     const carbs = rows.map((r) => Math.round((r.macros?.carbs ?? 0) * 4));
     const fat = rows.map((r) => Math.round((r.macros?.fat ?? 0) * 9));
@@ -364,8 +375,8 @@ async function loadChartAndList(
       { label: "Fat", data: fat, backgroundColor: c.bad, stack: "macros", borderRadius: 4, borderSkipped: false, maxBarThickness: 26 },
       { label: "Alcohol", data: alcohol, backgroundColor: c.violet, stack: "macros", borderRadius: 4, borderSkipped: false, maxBarThickness: 26 },
     ];
-    if (tdee != null) {
-      datasets.push({ type: "line", label: "TDEE", data: labels.map(() => Math.round(tdee)), borderColor: c.text, borderDash: [6, 5], pointRadius: 0, borderWidth: 2 });
+    if (tdeeSeries.some((v) => v != null)) {
+      datasets.push({ type: "line", label: "TDEE", data: tdeeSeries, borderColor: c.text, borderDash: [6, 5], pointRadius: 0, borderWidth: 2, spanGaps: true });
     }
     const macroScales = baseScales(c, true);
     (macroScales.x as Record<string, unknown>).stacked = true;
