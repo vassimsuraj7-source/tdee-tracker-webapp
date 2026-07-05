@@ -1,6 +1,24 @@
 import { describe, it, expect } from "vitest";
-import { fillMissingWeightData, trendWeight, computeTrendWeight } from "./trendWeight.js";
+import { fillMissingWeightData, trendWeight, trendWeightPartial, computeTrendWeight } from "./trendWeight.js";
 import type { DatedValue } from "./types.js";
+
+describe("trendWeightPartial (display expanding window)", () => {
+  const filled: DatedValue[] = [
+    { date: "2026-07-01", value: 80 },
+    { date: "2026-07-02", value: 82 },
+    { date: "2026-07-03", value: 81 },
+  ];
+  it("is undefined on the first day (fewer than minDays)", () => {
+    expect(trendWeightPartial(filled, "2026-07-01", 7, 2)).toBeUndefined();
+  });
+  it("averages the available days once minDays is met", () => {
+    expect(trendWeightPartial(filled, "2026-07-02", 7, 2)).toBe(81); // (80+82)/2
+    expect(trendWeightPartial(filled, "2026-07-03", 7, 2)).toBe(81); // (80+82+81)/3
+  });
+  it("strict trendWeight stays undefined until a full window", () => {
+    expect(trendWeight(filled, "2026-07-03", 7)).toBeUndefined();
+  });
+});
 
 describe("fillMissingWeightData", () => {
   it("returns empty for empty input", () => {

@@ -11,7 +11,7 @@ import {
   type TimeRange,
   type GoalType,
 } from "@tdee/server";
-import { fillMissingWeightData, trendWeight } from "@tdee/engine";
+import { fillMissingWeightData, trendWeightPartial } from "@tdee/engine";
 import { supabase } from "../supabase.js";
 import { el, fmt, fmtInt, localIsoToday } from "../util.js";
 import { applyChartDefaults, themeColors, withAlpha, baseScales, phaseBandsPlugin, type PhaseBand } from "../chartTheme.js";
@@ -281,7 +281,9 @@ async function loadChartAndList(
     );
     const raw = rows.map((r) => r.value * cfg.scale);
     const trend = rows.map((r) => {
-      const t = trendWeight(filled, r.date, 7);
+      // Expanding-window trend for display: starts near the first weigh-in instead
+      // of waiting for a full 7 days. TDEE still uses the strict 7-day average.
+      const t = trendWeightPartial(filled, r.date, 7, 2);
       return t === undefined ? null : t * cfg.scale;
     });
     const pointColors = rows.map((r, i) => {

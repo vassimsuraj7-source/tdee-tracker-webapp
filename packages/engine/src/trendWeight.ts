@@ -88,6 +88,28 @@ export function trendWeight(
 }
 
 /**
+ * Display-oriented trend for charts: like `trendWeight`, but averages whatever daily
+ * values exist in the window as long as at least `minDays` are present (an expanding
+ * window at the start of history). This lets a chart show a trend line from near the
+ * very first weigh-in — closer to how adaptive-smoothing apps present it — instead of
+ * waiting for a full 7-day window.
+ *
+ * Deliberately NOT used by the TDEE engine, which requires the stable full-window
+ * average (`trendWeight`) so the energy-balance math and native-app continuity hold.
+ */
+export function trendWeightPartial(
+  filled: readonly DatedValue[],
+  date: IsoDate,
+  window: number = TREND_WINDOW,
+  minDays = 2,
+): number | undefined {
+  const start = addDays(date, -(window - 1));
+  const values = filled.filter((e) => isWithin(e.date, start, date)).map((e) => e.value);
+  if (values.length < minDays) return undefined;
+  return mean(values);
+}
+
+/**
  * Convenience: fill the range needed for a single date's trend and compute it.
  * Neighbours are still drawn from the full `raw` history.
  */
