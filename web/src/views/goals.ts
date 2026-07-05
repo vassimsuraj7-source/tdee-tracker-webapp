@@ -123,7 +123,7 @@ export function renderGoals(root: HTMLElement): void {
   select.addEventListener("change", () => void load(container, select.value as GoalType));
 
   root.replaceChildren(
-    el("div", {}, [el("label", { text: "Metric" }, [select]), container]),
+    el("div", { class: "readable" }, [el("label", { text: "Metric" }, [select]), container]),
   );
   void load(container, "weight");
 }

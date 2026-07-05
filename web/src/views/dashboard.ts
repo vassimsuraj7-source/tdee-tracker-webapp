@@ -182,8 +182,15 @@ function render(root: HTMLElement, d: DashboardData, insights: WeeklyInsights | 
   const macros = macroCard(d);
   const week = insights ? insightsCard(insights) : null;
 
-  root.replaceChildren(
-    ...banners,
+  const lastSync = el("div", { class: "card" }, [
+    el("div", { class: "metric" }, [
+      el("div", {}, [el("div", { class: "label", attrs: { style: "text-align:left;" }, text: "Last sync" }), el("div", { class: "sub", text: fmtTimestamp(d.syncTimestamp) })]),
+      recomputeBtn,
+    ]),
+    el("div", { class: "sub" }, [recomputeMsg]),
+  ]);
+
+  const grid = el("div", { class: "dash-grid" }, [
     heroCard(root, d),
     ...(macros ? [macros] : []),
     ...(week ? [week] : []),
@@ -192,14 +199,10 @@ function render(root: HTMLElement, d: DashboardData, insights: WeeklyInsights | 
     metricCard(root, "bodyfat", "Body fat · 7-day avg", fmt(bf, 1, "%"), bfLatest),
     metricCard(root, "steps", "Steps · latest", fmtInt(d.steps.latest?.value), d.steps.latest?.date),
     metricCard(root, "calories", "Calories · latest", fmtInt(d.calories.latest?.value, " kcal"), d.calories.latest?.date),
-    el("div", { class: "card" }, [
-      el("div", { class: "metric" }, [
-        el("div", {}, [el("div", { class: "label", attrs: { style: "text-align:left;" }, text: "Last sync" }), el("div", { class: "sub", text: fmtTimestamp(d.syncTimestamp) })]),
-        recomputeBtn,
-      ]),
-      el("div", { class: "sub" }, [recomputeMsg]),
-    ]),
-  );
+    lastSync,
+  ]);
+
+  root.replaceChildren(...banners, grid);
 }
 
 function skeleton(root: HTMLElement): void {

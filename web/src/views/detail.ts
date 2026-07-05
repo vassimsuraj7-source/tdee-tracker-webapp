@@ -344,6 +344,6 @@ export function renderMetricDetail(root: HTMLElement, metric: DetailMetric, onBa
   ];
   if (metric !== "tdee") children.push(addForm(metric, () => void reload()));
 
-  root.replaceChildren(el("div", {}, children));
+  root.replaceChildren(el("div", { class: "readable" }, children));
   void reload();
 }

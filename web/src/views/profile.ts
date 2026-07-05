@@ -65,7 +65,7 @@ export async function renderProfile(root: HTMLElement): Promise<void> {
   const ageText = p.age != null ? `Age: ${p.age}` : "Age: — (set date of birth)";
 
   root.replaceChildren(
-    el("div", {}, [
+    el("div", { class: "readable" }, [
       el("div", { class: "card" }, [
         el("h2", { text: "Profile" }),
         el("label", { text: "Name" }, [name]),

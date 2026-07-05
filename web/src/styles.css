@@ -224,3 +224,28 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes shimmer { to { background-position: -220% 0; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---------- Adaptive layout — use the available space ---------- */
+/* Dashboard cards flow in a responsive grid; phone stays single-column. */
+.dash-grid { display: grid; grid-template-columns: 1fr; gap: 13px; align-items: start; }
+.dash-grid > .card { margin-bottom: 0; }
+
+/* Tablet / small laptop: two columns, wider canvas, bigger hero number. */
+@media (min-width: 900px) {
+  .app { max-width: 1000px; padding-left: 22px; padding-right: 22px; }
+  .tabbar { max-width: 1000px; }
+  .dash-grid { grid-template-columns: 1fr 1fr; }
+  .dash-grid > .hero { grid-column: 1 / -1; }
+  .chart-box { height: 340px; }
+  .hero .big { font-size: 54px; }
+  /* Keep standalone views (detail/goals/profile) comfortably readable, not stretched. */
+  .readable { max-width: 720px; margin-left: auto; margin-right: auto; }
+}
+
+/* Large desktop: three columns for the metric grid. */
+@media (min-width: 1300px) {
+  .app { max-width: 1200px; }
+  .tabbar { max-width: 1200px; }
+  .dash-grid { grid-template-columns: repeat(3, 1fr); }
+  .dash-grid > .hero { grid-column: 1 / -1; }
+}
