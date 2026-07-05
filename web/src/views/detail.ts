@@ -593,8 +593,16 @@ export function renderMetricDetail(root: HTMLElement, metric: DetailMetric, onBa
   const summaryBox = el("div", {});
   const listBox = el("div", {});
 
+  // A shimmer overlay shown over the chart while a range change / reload fetches.
+  const loading = el("div", { class: "skel", attrs: { style: "position:absolute;inset:0;border-radius:14px;z-index:2;" } });
+
   async function reload(): Promise<void> {
-    await loadChartAndList(metric, range, canvas, listBox, summaryBox);
+    if (!loading.isConnected) chartBox.appendChild(loading);
+    try {
+      await loadChartAndList(metric, range, canvas, listBox, summaryBox);
+    } finally {
+      loading.remove();
+    }
   }
 
   const segmented = el("div", { class: "segmented" });
