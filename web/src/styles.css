@@ -231,7 +231,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .dash-grid > .card { margin-bottom: 0; }
 
 /* Tablet / small laptop: two columns, wider canvas, bigger hero number. */
-@media (min-width: 900px) {
+@media (min-width: 820px) {
   .app { max-width: 1000px; padding-left: 22px; padding-right: 22px; }
   .tabbar { max-width: 1000px; }
   .dash-grid { grid-template-columns: 1fr 1fr; }

@@ -12,7 +12,9 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # Let in-flight deploys finish rather than cancelling them — cancellation was
+  # surfacing as intermittent "Deployment failed, try again later" errors.
+  cancel-in-progress: false
 
 jobs:
   build:

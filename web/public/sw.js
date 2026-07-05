@@ -8,7 +8,7 @@
 //   - Cross-origin (Supabase API): never cached; the app renders the last dashboard
 //     from localStorage when offline.
 
-const CACHE = "tdee-shell-v2";
+const CACHE = "tdee-shell-v3";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
