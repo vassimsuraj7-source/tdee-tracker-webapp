@@ -269,10 +269,15 @@ async function loadChartAndList(
   const labels = rows.map((r) => r.date);
 
   if (cfg.kind === "trend") {
+    // Compute the 7-day trend over the FULL history (not just the visible range) so
+    // the moving average is already determined at the left edge of the window.
+    // Otherwise the trend "starts late" — the first ~6 in-range days would lack the
+    // preceding days the average needs. We still only DISPLAY the selected range.
+    const full = range === "all" ? rows : await listEntries(client(), metric as Metric, "all", today);
     const filled = fillMissingWeightData(
-      rows.map((r) => ({ date: r.date, value: r.value })),
-      rows[0]?.date ?? today,
-      rows[rows.length - 1]?.date ?? today,
+      full.map((r) => ({ date: r.date, value: r.value })),
+      full[0]?.date ?? today,
+      full[full.length - 1]?.date ?? today,
     );
     const raw = rows.map((r) => r.value * cfg.scale);
     const trend = rows.map((r) => {
