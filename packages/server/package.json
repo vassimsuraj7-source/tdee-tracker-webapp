@@ -1,0 +1,23 @@
+{
+  "name": "@tdee/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Server-side data access (repository) and the recompute routine. Depends on the pure @tdee/engine and talks to Supabase over HTTPS.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "@tdee/engine": "*"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
+  }
+}

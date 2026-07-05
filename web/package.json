@@ -1,0 +1,22 @@
+{
+  "name": "@tdee/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Installable PWA frontend for TDEETracker. Reuses @tdee/engine and @tdee/server, calling them with the authenticated Supabase session.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "@tdee/engine": "*",
+    "@tdee/server": "*",
+    "chart.js": "^4.4.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

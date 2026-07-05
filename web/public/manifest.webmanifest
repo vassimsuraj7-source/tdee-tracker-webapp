@@ -1,0 +1,13 @@
+{
+  "name": "TDEE Tracker",
+  "short_name": "TDEE",
+  "description": "Data-driven TDEE and daily calorie target from your Apple Health data.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#e9edf2",
+  "theme_color": "#0e7a5f",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

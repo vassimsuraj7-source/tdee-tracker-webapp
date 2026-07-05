@@ -1,0 +1,27 @@
+{
+  "name": "tdee-tracker-webapp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Web-based successor to the native iOS TDEETracker app. Free-first stack: Supabase + static PWA.",
+  "workspaces": [
+    "packages/*",
+    "web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:functions": "vitest run -c vitest.config.ts",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "eslint": "^9.15.0",
+    "prettier": "^3.3.3",
+    "supabase": "^2.109.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
+  }
+}

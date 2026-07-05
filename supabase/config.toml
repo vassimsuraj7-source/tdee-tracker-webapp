@@ -1,0 +1,20 @@
+# Supabase project configuration.
+# This file is used by the Supabase CLI (`supabase start`, `supabase db push`, etc.).
+# The local runtime requires Docker; see README for the free-first setup steps.
+
+project_id = "tdee-tracker-webapp"
+
+[db]
+port = 54322
+major_version = 15
+
+[api]
+port = 54321
+schemas = ["public"]
+
+[studio]
+port = 54323
+
+[functions]
+# Edge Functions (Deno) live under supabase/functions/<name>/index.ts.
+# Added in tasks 4 and 6 (ingestion + recompute).
