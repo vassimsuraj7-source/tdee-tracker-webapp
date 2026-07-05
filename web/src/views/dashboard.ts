@@ -66,6 +66,10 @@ function heroCard(root: HTMLElement, d: DashboardData): HTMLElement {
   const tdee = d.tdee.value;
   const rows: HTMLElement[] = [sourcePill(d.tdee.source)];
 
+  // Show the active phase so the target's intent is clear.
+  const phaseLabel: Record<string, string> = { cut: "Cut phase", maintain: "Maintain phase", bulk: "Bulk phase" };
+  if (d.phase && phaseLabel[d.phase]) rows.push(el("span", { class: "pill", text: phaseLabel[d.phase]! }));
+
   // Deficit / surplus vs maintenance (TDEE).
   if (t != null && tdee != null) {
     const diff = Math.round(t - tdee);

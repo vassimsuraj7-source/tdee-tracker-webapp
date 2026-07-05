@@ -36,7 +36,7 @@ Deno.serve(async (): Promise<Response> => {
   );
   const today = todayUtcIso();
 
-  const [wRes, cRes, pRes, gRes] = await Promise.all([
+  const [wRes, cRes, pRes, gRes, phRes] = await Promise.all([
     supabase.from("weight_entries").select("entry_date, value_kg").order("entry_date"),
     supabase.from("calorie_entries").select("entry_date, calories").order("entry_date"),
     supabase.from("user_profile").select("*").eq("id", 1).limit(1),
@@ -47,12 +47,14 @@ Deno.serve(async (): Promise<Response> => {
       .eq("order_index", -1)
       .eq("is_completed", false)
       .limit(1),
+    supabase.from("diet_phases").select("phase_type").is("end_date", null).limit(1),
   ]);
 
   const weights = (wRes.data ?? []).map((r) => ({ date: r.entry_date, value: r.value_kg }));
   const calories = (cRes.data ?? []).map((r) => ({ date: r.entry_date, value: r.calories }));
   const profile = pRes.data?.[0];
   const goal = gRes.data?.[0];
+  const currentPhase = phRes.data?.[0]?.phase_type ?? undefined;
 
   // 1) data-driven TDEE series + persist history
   const series = computeWindowTdees(weights, calories, today);
@@ -102,6 +104,7 @@ Deno.serve(async (): Promise<Response> => {
     ...(canUseGoal
       ? { goal: { targetWeightKg: goal.target_value, targetDate: goal.goal_date } }
       : {}),
+    ...(currentPhase ? { phase: currentPhase } : {}),
     today,
   });
 

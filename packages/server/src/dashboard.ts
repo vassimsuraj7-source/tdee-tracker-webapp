@@ -25,6 +25,8 @@ export interface DashboardData {
   macros: MacroTargets | null;
   /** Daily fiber target (14 g/1000 kcal) and recent average intake. */
   fiber: { target: number | null; average7d: number | null };
+  /** Current diet phase type ("cut"/"maintain"/"bulk"), or null if none active. */
+  phase: string | null;
   syncTimestamp: string | null;
 }
 
@@ -97,6 +99,14 @@ export async function getDashboard(client: SupabaseClient, today: string): Promi
     .limit(1);
   if (pErr) throw new Error(pErr.message);
   const activityPal = (pData?.[0]?.activity_pal as number | null) ?? 1.55;
+
+  const { data: phData, error: phErr } = await client
+    .from("diet_phases")
+    .select("phase_type")
+    .is("end_date", null)
+    .limit(1);
+  if (phErr) throw new Error(phErr.message);
+  const phase = (phData?.[0]?.phase_type as string | null) ?? null;
   const ct = ctData?.[0] as
     | {
         calorie_target: number | null;
@@ -150,6 +160,7 @@ export async function getDashboard(client: SupabaseClient, today: string): Promi
     },
     macros,
     fiber: { target: fiberTarget, average7d: fiberAvg7d },
+    phase,
     syncTimestamp,
   };
 }

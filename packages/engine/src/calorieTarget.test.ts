@@ -8,6 +8,32 @@ const base = {
 };
 
 describe("calorieTarget", () => {
+  it("a maintain phase forces maintenance, overriding a weight-loss goal", () => {
+    const r = calorieTarget({
+      ...base,
+      currentTdee: 2500,
+      tdeeSource: "data-driven",
+      currentTrendWeightKg: 85,
+      goal: { targetWeightKg: 78, targetDate: "2026-06-01" }, // a loss goal
+      phase: "maintain",
+    });
+    expect(r.calorieTarget).toBe(2500); // maintenance, not a deficit
+    expect(r.rateCapped).toBe(false);
+    expect(r.dateUnachievable).toBe(false);
+  });
+
+  it("a cut phase still defers to the weight goal (produces a deficit)", () => {
+    const r = calorieTarget({
+      ...base,
+      currentTdee: 2500,
+      tdeeSource: "data-driven",
+      currentTrendWeightKg: 85,
+      goal: { targetWeightKg: 78, targetDate: "2026-06-01" },
+      phase: "cut",
+    });
+    expect(r.calorieTarget).toBeLessThan(2500);
+  });
+
   it("is undetermined when there is no TDEE (Req 16.5)", () => {
     const r = calorieTarget({
       ...base,

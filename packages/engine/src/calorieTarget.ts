@@ -17,6 +17,9 @@ export interface CalorieTargetInput {
   readonly heightCm: number;
   /** Active weight Main_Goal, if one exists. */
   readonly goal?: WeightGoal;
+  /** Active diet phase, if any. A "maintain" phase forces maintenance calories,
+   *  overriding any goal; "cut"/"bulk" defer to the goal. */
+  readonly phase?: "cut" | "maintain" | "bulk";
   readonly today: IsoDate;
 }
 
@@ -45,7 +48,7 @@ export interface CalorieTargetResult {
  *    capped at the permitted rate, then floored at 1200.
  */
 export function calorieTarget(input: CalorieTargetInput): CalorieTargetResult {
-  const { currentTdee, tdeeSource, currentTrendWeightKg, heightCm, goal, today } = input;
+  const { currentTdee, tdeeSource, currentTrendWeightKg, heightCm, goal, phase, today } = input;
 
   if (currentTdee === undefined) {
     return {
@@ -64,6 +67,9 @@ export function calorieTarget(input: CalorieTargetInput): CalorieTargetResult {
     rateCapped: false,
     dateUnachievable: false,
   });
+
+  // A maintenance phase intentionally holds weight — eat at TDEE, ignoring any goal.
+  if (phase === "maintain") return maintenance();
 
   // No goal, or we can't anchor to a current weight -> maintenance.
   if (!goal || currentTrendWeightKg === undefined) {

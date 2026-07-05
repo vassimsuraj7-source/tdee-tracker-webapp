@@ -36,12 +36,14 @@ export interface RecomputeResult {
  * the same underlying data yields identical stored state.
  */
 export async function runRecompute(client: SupabaseClient, today: string): Promise<RecomputeResult> {
-  const [weights, calories, profile, goal] = await Promise.all([
+  const [weights, calories, profile, goal, phaseRes] = await Promise.all([
     loadWeights(client),
     loadCalories(client),
     loadProfile(client),
     loadWeightMainGoal(client),
+    client.from("diet_phases").select("phase_type").is("end_date", null).limit(1),
   ]);
+  const currentPhase = (phaseRes.data?.[0]?.phase_type as "cut" | "maintain" | "bulk" | undefined) ?? undefined;
 
   // 1) Data-driven TDEE across all valid windows.
   const series = computeWindowTdees(weights, calories, today);
@@ -100,6 +102,7 @@ export async function runRecompute(client: SupabaseClient, today: string): Promi
     ...(canUseGoal
       ? { goal: { targetWeightKg: goal!.targetWeightKg, targetDate: goal!.targetDate! } }
       : {}),
+    ...(currentPhase ? { phase: currentPhase } : {}),
     today,
   });
 
