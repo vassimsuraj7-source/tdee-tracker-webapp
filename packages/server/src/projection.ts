@@ -7,16 +7,19 @@ export interface GoalProjectionResult {
   goalWeightKg: number | null;
   goalDate: string | null;
   currentTrendKg: number | null;
+  /** Weight recorded when the goal was set — the progress-bar starting point. */
+  startWeightKg: number | null;
   /** Baseline window (days) used to measure the rate, for transparency. */
   rateWindowDays: number | null;
   projection: GoalProjection | null;
 }
 
-const EMPTY = (goal?: { targetWeightKg: number; targetDate: string | null }): GoalProjectionResult => ({
+const EMPTY = (goal?: { targetWeightKg: number; targetDate: string | null; startWeightKg: number | null }): GoalProjectionResult => ({
   hasGoal: !!goal,
   goalWeightKg: goal?.targetWeightKg ?? null,
   goalDate: goal?.targetDate ?? null,
   currentTrendKg: null,
+  startWeightKg: goal?.startWeightKg ?? null,
   rateWindowDays: null,
   projection: null,
 });
@@ -64,6 +67,7 @@ export async function getGoalProjection(client: SupabaseClient, today: string): 
     goalWeightKg: goal.targetWeightKg,
     goalDate: goal.targetDate,
     currentTrendKg: trendNow,
+    startWeightKg: goal.startWeightKg,
     rateWindowDays,
     projection,
   };

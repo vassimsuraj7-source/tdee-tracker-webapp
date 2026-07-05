@@ -245,22 +245,54 @@ function fmtDateLong(iso: string | null): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function projectionCard(r: GoalProjectionResult | null): HTMLElement | null {
+/** A start→goal progress bar with a "you are here" fill and % complete. */
+function goalProgressBar(startKg: number | null, currentKg: number | null, goalKg: number | null): HTMLElement | null {
+  if (startKg == null || currentKg == null || goalKg == null || startKg === goalKg) return null;
+  const pct = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - goalKg)) * 100));
+  const remaining = Math.abs(goalKg - currentKg);
+  return el("div", { attrs: { style: "margin-top:12px;" } }, [
+    el("div", { attrs: { style: "position:relative;height:9px;border-radius:999px;background:var(--card2);overflow:hidden;" } }, [
+      el("div", { attrs: { style: `position:absolute;top:0;bottom:0;left:0;width:${pct}%;background:var(--accent);border-radius:999px;transition:width .5s ease;` } }),
+    ]),
+    el("div", { attrs: { style: "display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:var(--muted);font-weight:600;" } }, [
+      el("span", { text: `${startKg.toFixed(1)} → ${goalKg.toFixed(1)} kg` }),
+      el("span", { html: `<b style="color:var(--text);">${Math.round(pct)}%</b> · ${remaining.toFixed(1)} kg to go` }),
+    ]),
+  ]);
+}
+
+function projectionCard(r: GoalProjectionResult | null, phase: string | null): HTMLElement | null {
   if (!r || !r.hasGoal) return null;
   const goalKg = r.goalWeightKg != null ? `${r.goalWeightKg.toFixed(1)} kg` : "your goal";
-  const p = r.projection;
+  const prog = goalProgressBar(r.startWeightKg, r.currentTrendKg, r.goalWeightKg);
 
+  // During a maintenance phase, the goal isn't being pursued — don't show an ETA.
+  if (phase === "maintain") {
+    return el("div", { class: "card" }, [
+      el("h2", { text: "Goal projection" }),
+      el("div", { class: "metric" }, [
+        el("div", {}, [
+          el("div", { class: "value", attrs: { style: "font-size:19px;" }, text: "Goal paused" }),
+          el("div", { class: "sub", text: `Maintaining${r.currentTrendKg != null ? ` at ~${r.currentTrendKg.toFixed(1)} kg` : ""} — resume a cut or bulk to pursue ${goalKg}.` }),
+        ]),
+      ]),
+      ...(prog ? [prog] : []),
+    ]);
+  }
+
+  const p = r.projection;
   if (!p) {
     return el("div", { class: "card" }, [
       el("h2", { text: "Goal projection" }),
       el("div", { class: "metric" }, [
         el("div", {}, [el("div", { class: "value", attrs: { style: "font-size:19px;" }, text: "Not enough data yet" }), el("div", { class: "sub", text: `Keep logging weight — a couple of weeks lets me project when you'll hit ${goalKg}.` })]),
       ]),
+      ...(prog ? [prog] : []),
     ]);
   }
 
-  const rate = p.weeklyRateKg;
-  const rateStr = `${rate < 0 ? "−" : "+"}${Math.abs(rate).toFixed(2)} kg/wk`;
+  const rateVal = p.weeklyRateKg;
+  const rateStr = `${rateVal < 0 ? "−" : "+"}${Math.abs(rateVal).toFixed(2)} kg/wk`;
 
   let mainValue: string;
   let subText: string;
@@ -300,6 +332,7 @@ function projectionCard(r: GoalProjectionResult | null): HTMLElement | null {
       el("div", {}, [el("div", { class: "value", attrs: { style: "font-size:22px;" }, text: mainValue }), el("div", { class: "sub", text: subText })]),
       ...(badge ? [el("div", {}, [badge])] : []),
     ]),
+    ...(prog ? [prog] : []),
   ]);
 }
 
@@ -450,7 +483,7 @@ function render(
   ]);
   formulasCard.addEventListener("click", () => open(root, "formulas"));
 
-  const proj = projectionCard(projection);
+  const proj = projectionCard(projection, d.phase);
   const plat = plateauCard(plateau);
   const dq = dataQualityCard(dataQuality);
 

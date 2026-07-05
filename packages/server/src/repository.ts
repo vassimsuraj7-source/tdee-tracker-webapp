@@ -15,6 +15,8 @@ export interface ProfileRow {
 export interface WeightMainGoal {
   targetWeightKg: number;
   targetDate: string | null; // ISO date
+  /** The trend/weight recorded when the goal was set (for progress %); may be null. */
+  startWeightKg: number | null;
 }
 
 /** A computed TDEE record ready to persist. */
@@ -73,15 +75,15 @@ export async function loadWeightMainGoal(client: SupabaseClient): Promise<Weight
   const rows = unwrap(
     await client
       .from("user_goals")
-      .select("target_value, goal_date")
+      .select("target_value, goal_date, current_value_at_set")
       .eq("goal_type", "weight")
       .eq("order_index", -1)
       .eq("is_completed", false)
       .limit(1),
-  ) as { target_value: number; goal_date: string | null }[];
+  ) as { target_value: number; goal_date: string | null; current_value_at_set: number | null }[];
   const row = rows[0];
   if (!row) return null;
-  return { targetWeightKg: row.target_value, targetDate: row.goal_date };
+  return { targetWeightKg: row.target_value, targetDate: row.goal_date, startWeightKg: row.current_value_at_set };
 }
 
 /** Upsert TDEE records keyed by window_end (Req 15.2). */

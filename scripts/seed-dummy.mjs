@@ -1,11 +1,14 @@
-// Seed ~35 days of realistic dummy data so the dashboard can be visualised, then
-// trigger the deployed recompute. Uses the service role from .env.
+// Reset all data and seed 16 weeks (112 days) across four diet phases so every
+// feature can be tested: Recomp -> Bulk -> Maintain -> Cut, 4 weeks each, ending
+// today (Cut is the current, ongoing phase). Uses the service role from .env.
 //
-//   node scripts/seed-dummy.mjs          # seed + recompute
-//   node scripts/seed-dummy.mjs --clear  # delete the seeded date range
+//   node scripts/seed-dummy.mjs          # full reset + seed + phases + goal + recompute
+//   node scripts/seed-dummy.mjs --clear  # full reset only (no seeding)
 //
-// Profile: weight ~85 -> ~82 kg (a healthy deficit), calories 2000-2500,
-// body fat 20% -> 18%, steps 6k-12k. Dates end today, going back 35 days.
+// Weight & calorie trajectories are internally consistent so the derived TDEE stays
+// ~2600 across phases (TDEE ≈ intake − weeklyKg×1100/day):
+//   Recomp  −0.15 kg/wk, ~2435 kcal   Bulk +0.30 kg/wk, ~2930 kcal
+//   Maintain 0 kg/wk,     ~2600 kcal   Cut  −0.50 kg/wk, ~2050 kcal
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -20,51 +23,85 @@ const url = get("SUPABASE_URL");
 const serviceKey = get("SUPABASE_SERVICE_ROLE_KEY");
 const db = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-const DAYS = 35;
 function isoDaysAgo(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
 }
-const dates = Array.from({ length: DAYS }, (_, i) => isoDaysAgo(DAYS - 1 - i)); // oldest -> newest
-const first = dates[0];
-const last = dates[dates.length - 1];
+const rand = (min, max) => min + Math.random() * (max - min);
+const r1 = (x) => Math.round(x * 10) / 10;
 
-const clear = process.argv.includes("--clear");
-const inRange = (q) => q.gte("entry_date", first).lte("entry_date", last);
-
-if (clear) {
-  for (const t of ["weight_entries", "calorie_entries", "step_entries", "body_fat_entries"]) {
-    const { error } = await inRange(db.from(t).delete());
-    console.log(`${t}: ${error ? "ERROR " + error.message : "cleared " + first + ".." + last}`);
+// ---- Full reset (test data only; schema untouched) ----
+async function wipe() {
+  const jobs = [
+    db.from("weight_entries").delete().gte("entry_date", "1900-01-01"),
+    db.from("calorie_entries").delete().gte("entry_date", "1900-01-01"),
+    db.from("step_entries").delete().gte("entry_date", "1900-01-01"),
+    db.from("body_fat_entries").delete().gte("entry_date", "1900-01-01"),
+    db.from("tdee_records").delete().gte("window_end", "1900-01-01"),
+    db.from("diet_phases").delete().not("id", "is", null),
+    db.from("user_goals").delete().not("id", "is", null),
+  ];
+  for (const j of jobs) {
+    const { error } = await j;
+    if (error) console.log("wipe error:", error.message);
   }
-  await db.from("tdee_records").delete().gte("window_end", first).lte("window_end", last);
-  console.log("Cleared dummy data.");
+  console.log("Wiped all entries, phases, goals, and TDEE records.");
+}
+
+await wipe();
+if (process.argv.includes("--clear")) {
+  await db.from("current_target").update({
+    calorie_target: null, tdee_used: null, tdee_source: "undetermined",
+    rate_capped: false, date_unachievable: false, warning: null,
+  }).eq("id", 1);
+  console.log("Cleared. (no seeding)");
   process.exit(0);
 }
 
-const rand = (min, max) => min + Math.random() * (max - min);
+// ---- Phase plan (oldest -> newest) ----
+const PHASES = [
+  { type: "recomp", weeks: 4, weeklyKg: -0.15, kcal: 2435, bfWk: -0.0012 },
+  { type: "bulk", weeks: 4, weeklyKg: 0.30, kcal: 2930, bfWk: 0.0015 },
+  { type: "maintain", weeks: 4, weeklyKg: 0.0, kcal: 2600, bfWk: 0.0 },
+  { type: "cut", weeks: 4, weeklyKg: -0.5, kcal: 2050, bfWk: -0.003 },
+];
+const TOTAL_DAYS = PHASES.reduce((s, p) => s + p.weeks * 7, 0); // 112
+const dates = Array.from({ length: TOTAL_DAYS }, (_, i) => isoDaysAgo(TOTAL_DAYS - 1 - i));
 
+// Assign each day to a phase and record phase date ranges.
+const dayPhase = [];
+const phaseRanges = [];
+let cursor = 0;
+for (const p of PHASES) {
+  const len = p.weeks * 7;
+  phaseRanges.push({ type: p.type, startIdx: cursor, endIdx: cursor + len - 1 });
+  for (let k = 0; k < len; k++) dayPhase.push(p);
+  cursor += len;
+}
+
+// ---- Generate daily rows ----
+let weight = 82.0;
+let bf = 0.18;
 const weightRows = [];
 const calorieRows = [];
 const stepRows = [];
 const bodyFatRows = [];
 
 dates.forEach((date, i) => {
-  const t = i / (DAYS - 1); // 0..1
-  const weight = 85 - 3 * t + rand(-0.3, 0.3); // 85 -> 82 with daily noise
-  const bodyFat = 0.2 - 0.02 * t + rand(-0.003, 0.003); // 20% -> 18%
-  weightRows.push({ entry_date: date, value_kg: Math.round(weight * 10) / 10 });
-  calorieRows.push({
-    entry_date: date,
-    calories: Math.round(rand(2000, 2500)),
-    protein_g: Math.round(rand(120, 180)),
-    carbs_g: Math.round(rand(150, 250)),
-    fat_g: Math.round(rand(50, 90)),
-    fiber_g: Math.round(rand(20, 40)),
-  });
-  stepRows.push({ entry_date: date, steps: Math.round(rand(6000, 12000)) });
-  bodyFatRows.push({ entry_date: date, value_fraction: Math.round(bodyFat * 1000) / 1000 });
+  const p = dayPhase[i];
+  weight += p.weeklyKg / 7;
+  bf += p.bfWk / 7;
+  const kcal = Math.round(p.kcal + rand(-150, 150));
+  const protein = Math.round(rand(150, 185));
+  const fat = Math.round(rand(60, 90));
+  const proteinKcal = protein * 4;
+  const fatKcal = fat * 9;
+  const carbs = Math.max(0, Math.round((kcal - proteinKcal - fatKcal) / 4));
+  weightRows.push({ entry_date: date, value_kg: r1(weight + rand(-0.4, 0.4)) });
+  bodyFatRows.push({ entry_date: date, value_fraction: Math.round(Math.max(0.05, bf) * 1000) / 1000 });
+  calorieRows.push({ entry_date: date, calories: kcal, protein_g: protein, carbs_g: carbs, fat_g: fat, fiber_g: Math.round(rand(24, 40)) });
+  stepRows.push({ entry_date: date, steps: Math.round(rand(6000, 11000)) });
 });
 
 async function up(table, rows) {
@@ -72,11 +109,33 @@ async function up(table, rows) {
   console.log(`${table}: ${error ? "ERROR " + error.message : rows.length + " rows"}`);
 }
 
-console.log(`Seeding ${first} .. ${last} (${DAYS} days)...`);
+console.log(`Seeding ${dates[0]} .. ${dates[dates.length - 1]} (${TOTAL_DAYS} days, 4 phases)...`);
 await up("weight_entries", weightRows);
 await up("calorie_entries", calorieRows);
 await up("step_entries", stepRows);
 await up("body_fat_entries", bodyFatRows);
+
+// ---- Phases (last one ongoing) ----
+const phaseRows = phaseRanges.map((r, idx) => ({
+  phase_type: r.type,
+  start_date: dates[r.startIdx],
+  end_date: idx === phaseRanges.length - 1 ? null : dates[r.endIdx],
+  note: `${r.type} block (seed)`,
+}));
+const { error: phErr } = await db.from("diet_phases").insert(phaseRows);
+console.log(`diet_phases: ${phErr ? "ERROR " + phErr.message : phaseRows.length + " phases"}`);
+
+// ---- A weight goal so projection/progress can be tested (current phase is Cut) ----
+const goalDate = isoDaysAgo(-56); // ~8 weeks out
+const { error: goalErr } = await db.from("user_goals").insert({
+  goal_type: "weight",
+  order_index: -1,
+  target_value: 79,
+  goal_date: goalDate,
+  current_value_at_set: r1(weightRows[0].value_kg),
+});
+console.log(`user_goals: ${goalErr ? "ERROR " + goalErr.message : "weight goal 79 kg by " + goalDate}`);
+
 await db.from("sync_state").update({ last_sync_at: new Date().toISOString() }).eq("id", 1);
 
 console.log("\nTriggering recompute...");
@@ -86,4 +145,4 @@ const res = await fetch(`${url}/functions/v1/recompute`, {
   body: "{}",
 });
 console.log("recompute:", res.status, await res.text());
-console.log("\nDone. Refresh the app to see the dashboard populated.");
+console.log("\nDone. Refresh the app.");
