@@ -299,6 +299,10 @@ async function loadChartAndList(
   const rows = metric === "calories" ? entries.filter((e) => e.value > 0) : entries;
   const labels = rows.map((r) => r.date);
 
+  // For trend metrics, capture each day's position vs the 7-day trend so the
+  // history list can echo the chart's green(below)/red(above) colour coding.
+  let deviations: Map<string, "below" | "above"> | undefined;
+
   if (cfg.kind === "trend") {
     // Compute the 7-day trend over the FULL history (not just the visible range) so
     // the moving average is already determined at the left edge of the window.
@@ -317,10 +321,13 @@ async function loadChartAndList(
       const t = trendWeightPartial(filled, r.date, 7, 2);
       return t === undefined ? null : t * cfg.scale;
     });
+    deviations = new Map();
     const pointColors = rows.map((r, i) => {
       const t = trend[i];
       if (t == null) return c.muted;
-      return r.value * cfg.scale <= t ? c.good : c.bad; // below trend = green
+      const below = r.value * cfg.scale <= t;
+      deviations!.set(r.date, below ? "below" : "above");
+      return below ? c.good : c.bad; // below trend = green
     });
 
     const datasets: Record<string, unknown>[] = [
@@ -426,7 +433,7 @@ async function loadChartAndList(
   }
 
   renderSummary(summaryBox, metric, rows);
-  renderList(metric, rows, listBox, canvas, range, summaryBox);
+  renderList(metric, rows, listBox, canvas, range, summaryBox, deviations);
 }
 
 function renderList(
@@ -436,6 +443,7 @@ function renderList(
   canvas: HTMLCanvasElement,
   range: TimeRange,
   summaryBox: HTMLElement,
+  deviations?: Map<string, "below" | "above">,
 ): void {
   const cfg = CFG[metric];
   const reload = () => void loadChartAndList(metric, range, canvas, listBox, summaryBox);
@@ -444,16 +452,34 @@ function renderList(
     const display = fmt(r.value * cfg.scale, cfg.decimals, cfg.unit ? " " + cfg.unit : "");
     const row = el("div", { class: "list-item" });
 
+    // Deviation dot (weight/body-fat): green = at or below trend, red = above.
+    const dev = deviations?.get(r.date);
+    const dotColor = dev === "below" ? "var(--good)" : dev === "above" ? "var(--bad)" : null;
+    const label = (): HTMLElement =>
+      el("span", { class: "k", attrs: { style: "display:inline-flex;align-items:center;gap:8px;" } }, [
+        ...(dotColor ? [el("span", { attrs: { style: `width:8px;height:8px;border-radius:999px;background:${dotColor};flex:none;`, title: dev === "below" ? "At or below trend" : "Above trend" } })] : []),
+        el("span", { text: `${fmtShortDate(r.date)}  ·  ${display}` }),
+      ]);
+
     const showView = (): void => {
       const edit = el("button", { class: "btn secondary small", text: "Edit" });
-      const del = el("button", { class: "btn danger small", text: "Delete" });
+      const del = el("button", { class: "btn secondary small", text: "Delete", attrs: { title: "Delete entry" } });
       edit.addEventListener("click", showEdit);
-      del.addEventListener("click", async () => {
-        if (!confirm(`Delete ${cfg.title} entry for ${r.date}?`)) return;
+      del.addEventListener("click", showConfirmDelete);
+      row.replaceChildren(label(), el("span", { class: "btn-row" }, [edit, del]));
+    };
+
+    const showConfirmDelete = (): void => {
+      const prompt = el("span", { class: "k", attrs: { style: "color:var(--bad);font-weight:700;" }, text: "Delete this entry?" });
+      const yes = el("button", { class: "btn danger small", text: "Delete" });
+      const no = el("button", { class: "btn secondary small", text: "Cancel" });
+      no.addEventListener("click", showView);
+      yes.addEventListener("click", async () => {
+        yes.setAttribute("disabled", "true");
         await deleteEntry(client(), metric as Metric, r.date);
         reload();
       });
-      row.replaceChildren(el("span", { class: "k", text: `${fmtShortDate(r.date)}  ·  ${display}` }), el("span", { class: "btn-row" }, [edit, del]));
+      row.replaceChildren(prompt, el("span", { class: "btn-row" }, [no, yes]));
     };
 
     const showEdit = (): void => {
